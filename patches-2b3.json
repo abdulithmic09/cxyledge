@@ -1,0 +1,47 @@
+[
+ {
+  "file": "src/lib/inventory/analyse.ts",
+  "old": "import type { Entry, MovementKind, PaymentStatus } from \"@/lib/inventory/api\";\nimport { addDays, eachDate, parseISODate, todayISO } from \"@/lib/inventory/model\";\nimport { consumeSerials, splitSerials } from \"@/lib/inventory/serials\";\n\n",
+  "new": "import type { Entry, MovementKind, Payment, PaymentStatus } from \"@/lib/inventory/api\";\nimport { addDays, eachDate, parseISODate, todayISO } from \"@/lib/inventory/model\";\nimport { consumeSerials, splitSerials } from \"@/lib/inventory/serials\";\n\n"
+ },
+ {
+  "file": "src/lib/inventory/analyse.ts",
+  "old": "  paid: number;\n  toCollect: number;\n  toPay: number;\n  lastUpdated: string;\n};\n\n",
+  "new": "  paid: number;\n  toCollect: number;\n  toPay: number;\n  /** Payments recorded separately (after the bill). */\n  received: number;\n  paidOut: number;\n  lastUpdated: string;\n};\n\n"
+ },
+ {
+  "file": "src/lib/inventory/analyse.ts",
+  "old": "  return Math.max(0, (entry.amountDue ?? 0) - (entry.amountPaid ?? 0));\n}\n\nexport function companyBalances(entries: Entry[]): CompanyBalance[] {\n  const names = new Set(entries.map((entry) => entry.companyName));\n  const rows: CompanyBalance[] = [];\n  for (const company of names) {\n    const mine = entries.filter((entry) => entry.companyName === company);\n",
+  "new": "  return Math.max(0, (entry.amountDue ?? 0) - (entry.amountPaid ?? 0));\n}\n\nexport function companyBalances(entries: Entry[], payments: Payment[] = []): CompanyBalance[] {\n  const names = new Set(entries.map((entry) => entry.companyName));\n  for (const payment of payments) names.add(payment.companyName);\n  const rows: CompanyBalance[] = [];\n  for (const company of names) {\n    const mine = entries.filter((entry) => entry.companyName === company);\n"
+ },
+ {
+  "file": "src/lib/inventory/analyse.ts",
+  "old": "      if (entry.movement === \"purchase\") toPay += gap;\n      else toCollect += gap;\n    }\n    const typeOf = (entry: Entry) => {\n      const own = entry.cylinderType?.trim();\n      if (own) return own;\n",
+  "new": "      if (entry.movement === \"purchase\") toPay += gap;\n      else toCollect += gap;\n    }\n    const minePaid = payments.filter((payment) => payment.companyName === company);\n    const received = minePaid.filter((payment) => payment.direction === \"in\").reduce((total, payment) => total + payment.amount, 0);\n    const paidOut = minePaid.filter((payment) => payment.direction === \"out\").reduce((total, payment) => total + payment.amount, 0);\n    toCollect = Math.max(0, roundMoney(toCollect - received));\n    toPay = Math.max(0, roundMoney(toPay - paidOut));\n    paid += received + paidOut;\n    const typeOf = (entry: Entry) => {\n      const own = entry.cylinderType?.trim();\n      if (own) return own;\n"
+ },
+ {
+  "file": "src/lib/inventory/analyse.ts",
+  "old": "      .map(([type, out]) => ({ type, out: Math.max(0, out) }))\n      .filter((row) => row.out > 0)\n      .sort((a, b) => b.out - a.out || a.type.localeCompare(b.type));\n    const lastUpdated = mine.reduce((latest, entry) => (entry.updatedAt > latest ? entry.updatedAt : latest), \"\");\n    rows.push({\n      company,\n      delivered: deliveredQty,\n",
+  "new": "      .map(([type, out]) => ({ type, out: Math.max(0, out) }))\n      .filter((row) => row.out > 0)\n      .sort((a, b) => b.out - a.out || a.type.localeCompare(b.type));\n    const lastUpdated = [...mine.map((entry) => entry.updatedAt), ...minePaid.map((payment) => payment.createdAt)].reduce(\n      (latest, stamp) => (stamp > latest ? stamp : latest),\n      \"\",\n    );\n    rows.push({\n      company,\n      delivered: deliveredQty,\n"
+ },
+ {
+  "file": "src/lib/inventory/analyse.ts",
+  "old": "      paid,\n      toCollect,\n      toPay,\n      lastUpdated,\n    });\n  }\n",
+  "new": "      paid,\n      toCollect,\n      toPay,\n      received,\n      paidOut,\n      lastUpdated,\n    });\n  }\n"
+ },
+ {
+  "file": "src/lib/inventory/analyse.ts",
+  "old": "  purchased: number;\n};\n\nexport function totalsFor(entries: Entry[], today = todayISO()): MoneyTotals {\n  const overdueBefore = addDays(today, -7);\n  const totals: MoneyTotals = {\n    billed: 0,\n",
+  "new": "  purchased: number;\n};\n\nexport function totalsFor(entries: Entry[], today = todayISO(), payments: Payment[] = []): MoneyTotals {\n  const overdueBefore = addDays(today, -7);\n  const totals: MoneyTotals = {\n    billed: 0,\n"
+ },
+ {
+  "file": "src/lib/inventory/analyse.ts",
+  "old": "    if (entry.movement === \"delivery\" && open && entry.entryDate <= overdueBefore) {\n      totals.overdue += gap > 0 ? gap : 0;\n    }\n  }\n  return totals;\n}\n",
+  "new": "    if (entry.movement === \"delivery\" && open && entry.entryDate <= overdueBefore) {\n      totals.overdue += gap > 0 ? gap : 0;\n    }\n  }\n  for (const payment of payments) {\n    totals.paid += payment.amount;\n    if (payment.direction === \"in\") totals.toCollect = Math.max(0, roundMoney(totals.toCollect - payment.amount));\n    else totals.toPay = Math.max(0, roundMoney(totals.toPay - payment.amount));\n  }\n  return totals;\n}\n"
+ },
+ {
+  "file": "src/lib/inventory/analyse.ts",
+  "old": "  const iso = todayISO(last);\n  return iso < cap ? iso : cap;\n}\n",
+  "new": "  const iso = todayISO(last);\n  return iso < cap ? iso : cap;\n}\n\nfunction roundMoney(value: number) {\n  return Math.round(value * 100) / 100;\n}\n\nexport type LedgerRow = {\n  key: string;\n  date: string;\n  particulars: string;\n  /** What the company owes you goes up (bills you raised, money you paid them). */\n  debit: number;\n  /** What the company owes you goes down (money they paid, bills they raised on you). */\n  credit: number;\n  balance: number;\n  kind: \"bill\" | \"payment\" | \"purchase\";\n  paymentId?: string;\n};\n\n/** Money ledger for one company, oldest first, with a running balance. Positive = they owe you. */\nexport function companyLedger(entries: Entry[], payments: Payment[], company: string): LedgerRow[] {\n  const rows: Array<Omit<LedgerRow, \"balance\"> & { sort: string }> = [];\n  for (const entry of entries) {\n    if (entry.companyName !== company || entry.movement === \"return\") continue;\n    const what = `${entry.quantity}${entry.cylinderType ? ` × ${entry.cylinderType}` : \" cylinders\"}${entry.billNo ? ` · bill ${entry.billNo}` : \"\"}`;\n    if (entry.movement === \"delivery\") {\n      if (entry.amountDue) rows.push({ key: `${entry.id}-d`, date: entry.entryDate, particulars: `Delivery ${what}`, debit: entry.amountDue, credit: 0, kind: \"bill\", sort: `${entry.entryDate}${entry.updatedAt}a` });\n      if (entry.amountPaid) rows.push({ key: `${entry.id}-p`, date: entry.entryDate, particulars: `Received with bill${entry.billNo ? ` ${entry.billNo}` : \"\"}`, debit: 0, credit: entry.amountPaid, kind: \"payment\", sort: `${entry.entryDate}${entry.updatedAt}b` });\n    } else {\n      if (entry.amountDue) rows.push({ key: `${entry.id}-d`, date: entry.entryDate, particulars: `Purchase ${what}`, debit: 0, credit: entry.amountDue, kind: \"purchase\", sort: `${entry.entryDate}${entry.updatedAt}a` });\n      if (entry.amountPaid) rows.push({ key: `${entry.id}-p`, date: entry.entryDate, particulars: `Paid with purchase${entry.billNo ? ` ${entry.billNo}` : \"\"}`, debit: entry.amountPaid, credit: 0, kind: \"payment\", sort: `${entry.entryDate}${entry.updatedAt}b` });\n    }\n  }\n  for (const payment of payments) {\n    if (payment.companyName !== company) continue;\n    const how = `${payment.mode.toUpperCase()}${payment.reference ? ` ${payment.reference}` : \"\"}${payment.billNo ? ` · bill ${payment.billNo}` : \"\"}`;\n    rows.push({\n      key: payment.id,\n      date: payment.paidOn,\n      particulars: payment.direction === \"in\" ? `Payment received ${payment.receiptNo} · ${how}` : `Payment made ${payment.receiptNo} · ${how}`,\n      debit: payment.direction === \"out\" ? payment.amount : 0,\n      credit: payment.direction === \"in\" ? payment.amount : 0,\n      kind: \"payment\",\n      paymentId: payment.id,\n      sort: `${payment.paidOn}${payment.createdAt}c`,\n    });\n  }\n  rows.sort((a, b) => (a.sort < b.sort ? -1 : a.sort > b.sort ? 1 : 0));\n  let balance = 0;\n  return rows.map(({ sort: _sort, ...row }) => {\n    balance = roundMoney(balance + row.debit - row.credit);\n    return { ...row, balance };\n  });\n}\n"
+ }
+]
