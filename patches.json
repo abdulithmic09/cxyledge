@@ -1,0 +1,52 @@
+[
+ {
+  "file": "src/components/yard/app.tsx",
+  "old": "import { lazy, Suspense, useEffect, useState } from \"react\";\nimport { QueryClient, QueryClientProvider, useQuery, useQueryClient } from \"@tanstack/react-query\";\nimport { Building2, Cylinder, LayoutList, PieChart, Receipt, Settings } from \"lucide-react\";\nimport { SignInPanel } from \"@/components/yard/sign-in-panel\";\nimport { UserButton } from \"@/lib/auth/gates\";\n",
+  "new": "import { lazy, Suspense, useEffect, useState } from \"react\";\nimport { QueryClient, QueryClientProvider, useQuery, useQueryClient } from \"@tanstack/react-query\";\nimport { Building2, Cylinder, LayoutList, PieChart, Receipt, Scale, Settings } from \"lucide-react\";\nimport { SignInPanel } from \"@/components/yard/sign-in-panel\";\nimport { UserButton } from \"@/lib/auth/gates\";\n"
+ },
+ {
+  "file": "src/components/yard/app.tsx",
+  "old": "import { BillsView } from \"@/components/yard/bills\";\nimport { SettingsView } from \"@/components/yard/settings\";\n\nconst AnalyticsView = lazy(() => import(\"@/components/yard/analytics\"));\n\ntype View = \"book\" | \"analyse\" | \"companies\" | \"bills\" | \"setup\";\n\nconst NAV: Array<{ id: View; label: string; icon: typeof Cylinder }> = [\n  { id: \"book\", label: \"Book\", icon: LayoutList },\n  { id: \"analyse\", label: \"Analyse\", icon: PieChart },\n  { id: \"companies\", label: \"Firms\", icon: Building2 },\n  { id: \"bills\", label: \"Bills\", icon: Receipt },\n  { id: \"setup\", label: \"Setup\", icon: Settings },\n];\n\n",
+  "new": "import { BillsView } from \"@/components/yard/bills\";\nimport { SettingsView } from \"@/components/yard/settings\";\nimport { BalancesView } from \"@/components/yard/balances\";\n\nconst AnalyticsView = lazy(() => import(\"@/components/yard/analytics\"));\n\ntype View = \"book\" | \"balance\" | \"analyse\" | \"companies\" | \"bills\" | \"setup\";\n\nconst NAV: Array<{ id: View; label: string; icon: typeof Cylinder }> = [\n  { id: \"book\", label: \"Book\", icon: LayoutList },\n  { id: \"balance\", label: \"Balance\", icon: Scale },\n  { id: \"analyse\", label: \"Analytics\", icon: PieChart },\n  { id: \"companies\", label: \"Companies\", icon: Building2 },\n  { id: \"bills\", label: \"Bills\", icon: Receipt },\n  { id: \"setup\", label: \"Settings\", icon: Settings },\n];\n\n"
+ },
+ {
+  "file": "src/components/yard/app.tsx",
+  "old": "function Shell({ userId }: { userId: string }) {\n  const [view, setView] = useState<View>(\"book\");\n  const queryClient = useQueryClient();\n\n",
+  "new": "function Shell({ userId }: { userId: string }) {\n  const [view, setView] = useState<View>(\"book\");\n  const [focusCompany, setFocusCompany] = useState<string | null>(null);\n  const queryClient = useQueryClient();\n\n"
+ },
+ {
+  "file": "src/components/yard/app.tsx",
+  "old": "                    on ? \"bg-sand font-semibold text-ink\" : \"text-muted hover:bg-sand\",\n                  )}\n                  onClick={() => setView(item.id)}\n                >\n                  <Icon className=\"size-4\" aria-hidden />\n",
+  "new": "                    on ? \"bg-sand font-semibold text-ink\" : \"text-muted hover:bg-sand\",\n                  )}\n                  onClick={() => {\n                    setFocusCompany(null);\n                    setView(item.id);\n                  }}\n                >\n                  <Icon className=\"size-4\" aria-hidden />\n"
+ },
+ {
+  "file": "src/components/yard/app.tsx",
+  "old": "            <BookView entries={entries} userId={userId} logs={returnQuery.data ?? []} onChanged={refresh} syncedAt={entryQuery.dataUpdatedAt} />\n          ) : null}\n          {!loading && view === \"analyse\" ? (\n            <Suspense fallback={<p className=\"text-sm text-muted\">Drawing the analysis\u2026</p>}>\n",
+  "new": "            <BookView entries={entries} userId={userId} logs={returnQuery.data ?? []} onChanged={refresh} syncedAt={entryQuery.dataUpdatedAt} />\n          ) : null}\n          {!loading && view === \"balance\" ? (\n            <BalancesView\n              entries={entries}\n              onOpenCompany={(company) => {\n                setFocusCompany(company);\n                setView(\"companies\");\n              }}\n            />\n          ) : null}\n          {!loading && view === \"analyse\" ? (\n            <Suspense fallback={<p className=\"text-sm text-muted\">Drawing the analysis\u2026</p>}>\n"
+ },
+ {
+  "file": "src/components/yard/app.tsx",
+  "old": "          ) : null}\n          {!loading && view === \"companies\" ? (\n            <CompaniesView entries={entries} documents={docQuery.data ?? []} onChanged={refresh} />\n          ) : null}\n          {!loading && yard && view === \"bills\" ? <BillsView yard={yard} entries={entries} onChanged={refresh} /> : null}\n",
+  "new": "          ) : null}\n          {!loading && view === \"companies\" ? (\n            <CompaniesView key={focusCompany ?? \"all\"} entries={entries} documents={docQuery.data ?? []} onChanged={refresh} initialCompany={focusCompany} />\n          ) : null}\n          {!loading && yard && view === \"bills\" ? <BillsView yard={yard} entries={entries} onChanged={refresh} /> : null}\n"
+ },
+ {
+  "file": "src/components/yard/app.tsx",
+  "old": "                aria-current={on ? \"page\" : undefined}\n                className={cn(\n                  \"flex min-h-16 flex-1 flex-col items-center justify-center gap-0.5 text-xs\",\n                  on ? \"font-semibold text-rust\" : \"text-muted\",\n                )}\n                onClick={() => setView(item.id)}\n              >\n                <Icon className=\"size-5\" aria-hidden />\n",
+  "new": "                aria-current={on ? \"page\" : undefined}\n                className={cn(\n                  \"flex min-h-16 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[0.68rem]\",\n                  on ? \"font-semibold text-rust\" : \"text-muted\",\n                )}\n                onClick={() => {\n                  setFocusCompany(null);\n                  setView(item.id);\n                }}\n              >\n                <Icon className=\"size-5\" aria-hidden />\n"
+ },
+ {
+  "file": "src/components/yard/companies.tsx",
+  "old": "  documents,\n  onChanged,\n}: {\n  entries: Entry[];\n  documents: DocRecord[];\n  onChanged: () => void;\n}) {\n  const [query, setQuery] = useState(\"\");\n  const [selected, setSelected] = useState<string | null>(null);\n  const [error, setError] = useState(\"\");\n  const [pendingDelete, setPendingDelete] = useState<string | null>(null);\n",
+  "new": "  documents,\n  onChanged,\n  initialCompany,\n}: {\n  entries: Entry[];\n  documents: DocRecord[];\n  onChanged: () => void;\n  initialCompany?: string | null;\n}) {\n  const [query, setQuery] = useState(\"\");\n  const [selected, setSelected] = useState<string | null>(initialCompany ?? null);\n  const [error, setError] = useState(\"\");\n  const [pendingDelete, setPendingDelete] = useState<string | null>(null);\n"
+ },
+ {
+  "file": "src/components/yard/settings.tsx",
+  "old": "    <div className=\"flex flex-col gap-4\">\n      <div>\n        <h2 className=\"font-display text-3xl\">Setup</h2>\n        <p className=\"mt-1 text-sm text-muted\">\n          Active account <span className=\"font-semibold text-ink\">{yard.name}</span>. Switching accounts keeps each book separate.\n",
+  "new": "    <div className=\"flex flex-col gap-4\">\n      <div>\n        <h2 className=\"font-display text-3xl\">Settings</h2>\n        <p className=\"mt-1 text-sm text-muted\">\n          Active account <span className=\"font-semibold text-ink\">{yard.name}</span>. Switching accounts keeps each book separate.\n"
+ },
+ {
+  "file": "src/components/yard/bills.tsx",
+  "old": "            {yard.address ? <p className=\"mt-1 whitespace-pre-wrap text-muted\">{yard.address}</p> : null}\n            <p className=\"mt-1 text-muted\">\n              {[yard.phone && `Phone ${yard.phone}`, yard.gst && `GST ${yard.gst}`, yard.pan && `PAN ${yard.pan}`].filter(Boolean).join(\" \u00b7 \") || \"Add letterhead in Setup.\"}\n            </p>\n            <p className=\"mt-4 font-medium\">{kind === \"sale\" ? \"Sale bill\" : \"Purchase bill\"} {billNo}</p>\n",
+  "new": "            {yard.address ? <p className=\"mt-1 whitespace-pre-wrap text-muted\">{yard.address}</p> : null}\n            <p className=\"mt-1 text-muted\">\n              {[yard.phone && `Phone ${yard.phone}`, yard.gst && `GST ${yard.gst}`, yard.pan && `PAN ${yard.pan}`].filter(Boolean).join(\" \u00b7 \") || \"Add letterhead in Settings.\"}\n            </p>\n            <p className=\"mt-4 font-medium\">{kind === \"sale\" ? \"Sale bill\" : \"Purchase bill\"} {billNo}</p>\n"
+ }
+]
