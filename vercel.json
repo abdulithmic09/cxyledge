@@ -1,0 +1,4 @@
+{
+  "installCommand": "tar xzf app.tgz && npm ci --omit=dev --no-audit --no-fund",
+  "buildCommand": "npm run build"
+}
