@@ -1,0 +1,12 @@
+[
+ {
+  "file": "server/middleware/grok-pwa.ts",
+  "old": "  renderInstallPageHtml,\n  renderWebManifest,\n} from \"../../scripts/grok-pwa-shared.mjs\";\n\ninterface GrokPwaEvent {\n  url: URL;\n",
+  "new": "  renderInstallPageHtml,\n  renderWebManifest,\n} from \"../../scripts/grok-pwa-shared.mjs\";\nimport { ICON_180, ICON_192, ICON_512 } from \"../../scripts/cx-icons.mjs\";\n\nconst ICONS: Record<string, string> = {\n  \"/cx-icon-180.png\": ICON_180,\n  \"/cx-icon-192.png\": ICON_192,\n  \"/cx-icon-512.png\": ICON_512,\n};\n\ninterface GrokPwaEvent {\n  url: URL;\n"
+ },
+ {
+  "file": "server/middleware/grok-pwa.ts",
+  "old": "  const path = event.url.pathname;\n  const urlWithQuery = path + event.url.search;\n\n  if (path === \"/__grok/manifest.webmanifest\" || path === \"/__grok/manifest.json\") {\n    return new Response(renderWebManifest(requestHost(event)), {\n      headers: {\n",
+  "new": "  const path = event.url.pathname;\n  const urlWithQuery = path + event.url.search;\n\n  const icon = ICONS[path];\n  if (icon) {\n    return new Response(Uint8Array.from(atob(icon), (c) => c.charCodeAt(0)), {\n      headers: { \"content-type\": \"image/png\", \"cache-control\": \"public, max-age=604800\" },\n    });\n  }\n\n  if (path === \"/__grok/manifest.webmanifest\" || path === \"/__grok/manifest.json\") {\n    return new Response(renderWebManifest(requestHost(event)), {\n      headers: {\n"
+ }
+]
