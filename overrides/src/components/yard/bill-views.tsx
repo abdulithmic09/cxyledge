@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { saveDocument, type Entry, type PaymentStatus, type YardInfo } from "@/lib/inventory/api";
 import { cancelBill, getCancelledBill, type CancelledBill } from "@/lib/inventory/billing";
+import type { Challan } from "@/lib/inventory/tracking";
 import { splitSerials } from "@/lib/inventory/serials";
 import { downloadBlob, shareBlob } from "@/lib/inventory/files";
 import { billTotals, blobToDataUrl, dmy, lineAmount, makeBillPdf, pdfName, STATUS_WORD, type BillData, type BillLine } from "@/lib/inventory/bill-pdf";
@@ -67,6 +68,7 @@ export function billFromEntries(billNo: string, list: Entry[]): SavedBill {
 
 /** Every bill in the book, with download, edit and cancel. */
 export function BillRegister({
+  challans,
   yard,
   bills,
   cancelled,
@@ -76,6 +78,7 @@ export function BillRegister({
   onEdit,
   onChanged,
 }: {
+  challans: Challan[];
   yard: YardInfo;
   bills: SavedBill[];
   cancelled: CancelledBill[];
@@ -103,6 +106,11 @@ export function BillRegister({
   );
   const shownCancelled = cancelled.filter((bill) => !q || bill.billNo.toLowerCase().includes(q) || bill.creditNoteNo.toLowerCase().includes(q) || bill.company.toLowerCase().includes(q));
 
+  const challanOf = (no: string) => challans.find((challan) => challan.challanNo === no);
+  const pdfOf = (bill: SavedBill) => {
+    const slip = bill.billNo.startsWith("DC/") ? challanOf(bill.billNo) : undefined;
+    return makeBillPdf(bill.billNo.startsWith("DC/") ? { ...asData(bill), challan: { vehicle: slip?.vehicle ?? "", driver: slip?.driver ?? "", receiver: slip?.receiver ?? "", signature: slip?.signature ?? "" } } : asData(bill));
+  };
   const asData = (bill: SavedBill): BillData => ({
     yard,
     kind: bill.kind,
@@ -161,6 +169,7 @@ export function BillRegister({
         <ul className="divide-y divide-line">
           {shown.slice(0, limit).map((bill) => {
             const t = billTotals(asData(bill));
+            const isChallan = bill.billNo.startsWith("DC/");
             return (
               <li key={bill.billNo} className="py-3">
                 <div className="flex flex-wrap items-start justify-between gap-2">
@@ -168,25 +177,33 @@ export function BillRegister({
                     <p className="font-semibold">
                       {bill.billNo} <span className="font-normal text-muted">· {dmy(bill.date)}</span>
                       {bill.kind === "purchase" ? <span className="ml-2 rounded bg-sand px-1.5 py-0.5 text-xs font-medium">Purchase</span> : null}
+                      {isChallan ? <span className="ml-2 rounded bg-pine/15 px-1.5 py-0.5 text-xs font-medium text-pine">Challan{challanOf(bill.billNo)?.signature ? " · signed" : ""}</span> : null}
                     </p>
                     <p className="truncate text-sm">{bill.company}</p>
                     <p className="text-xs text-muted">{bill.lines.map((line) => `${line.quantity} × ${line.cylinderType || "cylinders"}`).join(" · ")}</p>
                   </div>
-                  <div className="text-right">
-                    <p className="font-semibold tabular-nums">{inr(t.total)}</p>
-                    <p className={cn("text-xs font-semibold", t.due > 0 ? "text-rust" : "text-pine")}>{t.due > 0 ? `${inr(t.due)} due` : STATUS_WORD.received}</p>
-                  </div>
+                  {isChallan ? (
+                    <div className="text-right">
+                      <p className="font-semibold tabular-nums">{t.quantity} cyl.</p>
+                      <p className="text-xs font-semibold text-rust">Not billed yet</p>
+                    </div>
+                  ) : (
+                    <div className="text-right">
+                      <p className="font-semibold tabular-nums">{inr(t.total)}</p>
+                      <p className={cn("text-xs font-semibold", t.due > 0 ? "text-rust" : "text-pine")}>{t.due > 0 ? `${inr(t.due)} due` : STATUS_WORD.received}</p>
+                    </div>
+                  )}
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <button type="button" className="btn btn-ghost h-9 px-3 text-sm" onClick={() => void makeBillPdf(asData(bill)).then((pdf) => downloadBlob(pdfName(bill.billNo, bill.company), pdf))}>
+                  <button type="button" className="btn btn-ghost h-9 px-3 text-sm" onClick={() => void pdfOf(bill).then((pdf) => downloadBlob(pdfName(bill.billNo, bill.company), pdf))}>
                     PDF
                   </button>
-                  <button type="button" className="btn btn-ghost h-9 px-3 text-sm" onClick={() => void makeBillPdf(asData(bill)).then((pdf) => shareBlob(pdfName(bill.billNo, bill.company), pdf, `${bill.billNo} · ${yard.name}`))}>
+                  <button type="button" className="btn btn-ghost h-9 px-3 text-sm" onClick={() => void pdfOf(bill).then((pdf) => shareBlob(pdfName(bill.billNo, bill.company), pdf, `${bill.billNo} · ${yard.name}`))}>
                     Share
                   </button>
                   {canEdit ? (
-                    <button type="button" className="btn btn-ghost h-9 px-3 text-sm" onClick={() => onEdit(bill)}>
-                      Edit
+                    <button type="button" className={cn("btn h-9 px-3 text-sm", isChallan ? "btn-pine" : "btn-ghost")} onClick={() => onEdit(bill)}>
+                      {isChallan ? "Make bill" : "Edit"}
                     </button>
                   ) : null}
                   {isOwner ? (
