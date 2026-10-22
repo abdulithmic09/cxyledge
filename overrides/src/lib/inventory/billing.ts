@@ -228,7 +228,11 @@ export const saveBill = createServerFn({ method: "POST" })
     `;
     if (inserted.length !== rows.length) return { ok: false as const, error: "Couldn't save the bill. Reload and try again." };
 
-    if (original) {
+    if (original.startsWith("DC/") && billNo !== original) {
+      // A delivery challan turned into a bill: remember which bill it became.
+      await sql`update challans set billed_bill_no = ${billNo} where yard_id = ${yard.id} and challan_no = ${original}`;
+    }
+    if (original && !original.startsWith("DC/")) {
       // The old PDF goes to Recently deleted; the new one replaces it.
       await sql`
         update documents set deleted_at = now(), deleted_by = ${context.userId}
