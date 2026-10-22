@@ -215,22 +215,24 @@ export function BillRegister({
                         setReason("");
                       }}
                     >
-                      Cancel bill
+                      {isChallan ? "Cancel challan" : "Cancel bill"}
                     </button>
                   ) : null}
                 </div>
                 {confirm === bill.billNo ? (
                   <div className="mt-3 grid gap-2 rounded-lg border border-rust/40 bg-rust/5 p-3">
                     <p className="text-sm">
-                      Cancelling takes this bill&apos;s cylinders and amount off {bill.company}&apos;s balance and makes a credit note. Payments already recorded stay, so money already received becomes a credit for the company.
+                      {isChallan
+                        ? `Cancelling takes this challan's cylinders off ${bill.company}'s balance. Use it if the cylinders never went out.`
+                        : `Cancelling takes this bill's cylinders and amount off ${bill.company}'s balance and makes a credit note. Payments already recorded stay, so money already received becomes a credit for the company.`}
                     </p>
                     <input className="field" value={reason} maxLength={300} onChange={(event) => setReason(event.target.value)} placeholder="Reason, e.g. wrong company or duplicate bill" aria-label="Reason for cancelling" />
                     <div className="flex flex-wrap gap-2">
                       <button type="button" className="btn btn-rust" disabled={busy} onClick={() => void doCancel(bill)}>
-                        {busy ? "Cancelling…" : "Cancel bill and make credit note"}
+                        {busy ? "Cancelling…" : isChallan ? "Cancel challan" : "Cancel bill and make credit note"}
                       </button>
                       <button type="button" className="btn btn-ghost" onClick={() => setConfirm(null)}>
-                        Keep bill
+                        {isChallan ? "Keep challan" : "Keep bill"}
                       </button>
                     </div>
                   </div>
