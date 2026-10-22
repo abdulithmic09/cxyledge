@@ -1,4 +1,4 @@
 {
-  "installCommand": "tar xzf app.tgz && cp -R overrides/. . && node apply-patches.mjs && sh cleanup.sh && npm ci --omit=dev --no-audit --no-fund",
+  "installCommand": "npm ci --omit=dev --no-audit --no-fund",
   "buildCommand": "npm run build"
 }
