@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Search, Trash2 } from "lucide-react";
+import { ClipboardCheck, Search, Trash2 } from "lucide-react";
 import { deletePayment, listCompanyMeta, saveDocument, type Entry, type Payment, type YardInfo } from "@/lib/inventory/api";
 import { companyBalances } from "@/lib/inventory/analyse";
 import { createHoldingCharge, deleteStockMove, getTracking, saveHoldTerms, saveStockMove, type StockMove, type StockMoveKind } from "@/lib/inventory/tracking";
@@ -13,6 +13,7 @@ import { useRole } from "@/lib/inventory/role";
 import { cn } from "@/lib/cn";
 import { TypePicker } from "@/components/yard/type-picker";
 import { Field, Panel } from "@/components/yard/ui";
+import { takeCylinderRequest } from "@/lib/inventory/nav-requests";
 
 type Note = { tone: "ok" | "bad"; text: string } | null;
 
@@ -42,6 +43,11 @@ const STOCK_TABS: Array<{ id: StockTab; label: string }> = [
   { id: "holding", label: "Holding charges" },
 ];
 let lastStockTab: StockTab = "plant";
+let cylinderAsk: string | null = null;
+const peekCylinder = () => {
+  if (!cylinderAsk) cylinderAsk = takeCylinderRequest();
+  return cylinderAsk;
+};
 
 export function StockView({ yard, entries, payments, onChanged }: { yard: YardInfo; entries: Entry[]; payments: Payment[]; onChanged: () => void }) {
   const client = useQueryClient();
@@ -53,7 +59,8 @@ export function StockView({ yard, entries, payments, onChanged }: { yard: YardIn
     void client.invalidateQueries({ queryKey: ["tracking"] });
     onChanged();
   };
-  const [tab, setTabState] = useState<StockTab>(lastStockTab);
+  const [tab, setTabState] = useState<StockTab>(() => (peekCylinder() ? "find" : lastStockTab));
+  const [counting, setCounting] = useState(false);
   const setTab = (next: StockTab) => {
     lastStockTab = next;
     setTabState(next);
@@ -81,7 +88,19 @@ export function StockView({ yard, entries, payments, onChanged }: { yard: YardIn
         ))}
       </div>
 
-      <StockTable rows={rows} />
+      {counting ? (
+        <CountWizard
+          rows={rows}
+          types={yard.cylinderTypes}
+          onClose={() => setCounting(false)}
+          onSaved={() => {
+            setCounting(false);
+            refresh();
+          }}
+        />
+      ) : (
+        <StockTable rows={rows} onCount={() => setCounting(true)} />
+      )}
 
       <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0" role="tablist" aria-label="Stock tasks">
         <div className="flex w-max gap-1 rounded-xl border border-line bg-card p-1">
@@ -105,7 +124,8 @@ export function StockView({ yard, entries, payments, onChanged }: { yard: YardIn
   );
 }
 
-function StockTable({ rows: all }: { rows: ReturnType<typeof yardStock> }) {
+function StockTable({ rows: all, onCount }: { rows: ReturnType<typeof yardStock>; onCount: () => void }) {
+  const { canEdit } = useRole();
   const [showAll, setShowAll] = useState(false);
   const active = all.filter((row) => row.countedOn || row.full || row.empty || row.plant || row.customers);
   const rows = showAll || !active.length ? all : active;
@@ -113,9 +133,19 @@ function StockTable({ rows: all }: { rows: ReturnType<typeof yardStock> }) {
   return (
     <Panel title="By gas type">
       {uncounted ? (
-        <p className="mb-3 rounded-lg bg-sand px-3 py-2 text-sm">
-          Do a stock count once (Stock count tab below) so the yard numbers start from what is really on the floor. After that, bills, returns and plant trips keep them up to date.
-        </p>
+        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg bg-sand px-3 py-3 text-sm">
+          <p className="min-w-0 flex-1">
+            {all.some((row) => row.full < 0 || row.empty < 0)
+              ? "Some numbers are below zero because the yard hasn't been counted yet. "
+              : ""}
+            Count what is in the yard once, and bills, returns and plant trips keep it right after that.
+          </p>
+          {canEdit ? (
+            <button type="button" className="btn btn-pine gap-2" onClick={onCount}>
+              <ClipboardCheck className="size-4" aria-hidden /> Start stock count
+            </button>
+          ) : null}
+        </div>
       ) : null}
       <div className="-mx-1 overflow-x-auto">
         <table className="w-full text-sm">
@@ -308,7 +338,11 @@ function CountPanel({ yard, onSaved }: { yard: YardInfo; onSaved: () => void }) 
 }
 
 function FindCylinder({ entries, moves }: { entries: Entry[]; moves: StockMove[] }) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(() => {
+    const asked = cylinderAsk ?? "";
+    cylinderAsk = null;
+    return asked;
+  });
   const index = useMemo(() => cylinderIndex(entries, moves), [entries, moves]);
   const q = query.trim().toLowerCase();
   const matches = useMemo(() => (q ? [...index.entries()].filter(([key]) => key.includes(q)).slice(0, 8) : []), [index, q]);
@@ -597,6 +631,132 @@ function MovesList({ moves, onChanged }: { moves: StockMove[]; onChanged: () => 
           Show more
         </button>
       ) : null}
+    </Panel>
+  );
+}
+
+/** One gas type at a time: how many full and empty cylinders are in the yard right now. */
+function CountWizard({ rows, types, onClose, onSaved }: { rows: ReturnType<typeof yardStock>; types: string[]; onClose: () => void; onSaved: () => void }) {
+  const active = rows.filter((row) => row.countedOn || row.full || row.empty || row.plant || row.customers).map((row) => row.type);
+  const [list, setList] = useState<string[]>(() => (active.length ? active : types.slice(0, 6)));
+  const [step, setStep] = useState(0);
+  const [counts, setCounts] = useState<Record<string, { full: string; empty: string }>>({});
+  const [adding, setAdding] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<Note>(null);
+  const date = todayISO();
+  const done = step >= list.length;
+  const type = list[step];
+  const value = type ? (counts[type] ?? { full: "", empty: "" }) : { full: "", empty: "" };
+  const filled = list.filter((item) => counts[item] && (counts[item]!.full !== "" || counts[item]!.empty !== ""));
+
+  useEffect(() => {
+    setNote(null);
+  }, [step]);
+
+  const set = (patch: Partial<{ full: string; empty: string }>) => type && setCounts({ ...counts, [type]: { ...value, ...patch } });
+
+  async function saveAll() {
+    setBusy(true);
+    setNote(null);
+    try {
+      for (const item of filled) {
+        const row = counts[item]!;
+        const result = await saveStockMove({
+          data: { kind: "count", plant: "", gasType: item, serialNo: "", quantity: 0, fullCount: row.full === "" ? 0 : Number(row.full), emptyCount: row.empty === "" ? 0 : Number(row.empty), challanNo: "", note: "Stock count", date },
+        });
+        if (!result.ok) {
+          setNote({ tone: "bad", text: `${item}: ${result.error}` });
+          return;
+        }
+      }
+      onSaved();
+    } catch {
+      setNote({ tone: "bad", text: "Couldn't save. Check your internet connection." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Panel title="Stock count">
+      <div className="mb-3 flex items-center justify-between gap-2 text-sm text-muted">
+        <span>{done ? "Check and save" : `Gas ${step + 1} of ${list.length}`} · {dmy(date)}</span>
+        <button type="button" className="underline" onClick={onClose}>
+          Cancel
+        </button>
+      </div>
+      <div className="mb-4 h-1.5 overflow-hidden rounded-full bg-sand">
+        <div className="h-full rounded-full bg-pine transition-all" style={{ width: `${Math.round((Math.min(step, list.length) / Math.max(1, list.length)) * 100)}%` }} />
+      </div>
+      {!done && type ? (
+        <div className="grid gap-4">
+          <div>
+            <p className="font-display text-2xl">{type}</p>
+            <p className="text-sm text-muted">Count the cylinders standing in your yard right now. Leave a box empty if there are none.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Full">
+              <input className="field text-center text-2xl tabular-nums" inputMode="numeric" autoFocus value={value.full} onChange={(event) => set({ full: event.target.value.replace(/[^\d]/g, "") })} placeholder="0" />
+            </Field>
+            <Field label="Empty">
+              <input className="field text-center text-2xl tabular-nums" inputMode="numeric" value={value.empty} onChange={(event) => set({ empty: event.target.value.replace(/[^\d]/g, "") })} placeholder="0" />
+            </Field>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {step > 0 ? (
+              <button type="button" className="btn btn-ghost" onClick={() => setStep(step - 1)}>
+                Back
+              </button>
+            ) : null}
+            <button type="button" className="btn btn-pine flex-1" onClick={() => setStep(step + 1)}>
+              {value.full === "" && value.empty === "" ? "Skip this gas" : "Next"}
+            </button>
+          </div>
+          <div className="flex flex-wrap items-end gap-2 border-t border-line pt-3">
+            <div className="min-w-0 flex-1">
+              <TypePicker value={adding} types={types} onChange={setAdding} />
+            </div>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              disabled={!adding || list.includes(adding)}
+              onClick={() => {
+                setList([...list, adding]);
+                setAdding("");
+              }}
+            >
+              Add this gas to the count
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="grid gap-3">
+          {filled.length ? (
+            <ul className="divide-y divide-line rounded-lg border border-line">
+              {filled.map((item) => (
+                <li key={item} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+                  <span className="font-medium">{item}</span>
+                  <span className="tabular-nums">
+                    <span className="text-pine">{counts[item]!.full || 0} full</span> · {counts[item]!.empty || 0} empty
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted">Nothing counted yet.</p>
+          )}
+          <StatusNote note={note} />
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className="btn btn-ghost" onClick={() => setStep(Math.max(0, list.length - 1))}>
+              Back
+            </button>
+            <button type="button" className="btn btn-pine flex-1" disabled={busy || !filled.length} onClick={() => void saveAll()}>
+              {busy ? "Saving…" : `Save count for ${filled.length} gas${filled.length === 1 ? "" : "es"}`}
+            </button>
+          </div>
+        </div>
+      )}
     </Panel>
   );
 }
