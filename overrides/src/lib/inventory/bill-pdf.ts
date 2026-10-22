@@ -25,6 +25,10 @@ export type BillData = {
   note: string;
   /** Present when this document is a credit note cancelling `billNo`. */
   credit?: { no: string; date: string; reason: string };
+  /** Heading instead of BILL, e.g. "HOLDING CHARGES". */
+  title?: string;
+  /** What the quantity counts (default "cylinder"), e.g. "cylinder-day". */
+  unit?: string;
 };
 
 export type ReceiptData = {
@@ -39,6 +43,8 @@ export type ReceiptData = {
   billNo: string;
   note: string;
   balanceAfter: number | null;
+  /** Heading instead of RECEIPT, e.g. "DEPOSIT RECEIPT". */
+  title?: string;
 };
 
 export function lineAmount(line: BillLine) {
@@ -308,7 +314,7 @@ export async function makeBillPdf(bill: BillData): Promise<Blob> {
   let p = new Page();
   pages.push(p);
 
-  const title = credit ? "CREDIT NOTE" : sale ? "BILL" : "PURCHASE BILL";
+  const title = credit ? "CREDIT NOTE" : (bill.title ?? (sale ? "BILL" : "PURCHASE BILL"));
   const fields: Array<[string, string]> = credit
     ? [["Credit note", credit.no], ["Date", dmy(credit.date)], ["Against bill", bill.billNo || "-"]]
     : [["Bill no.", bill.billNo || "-"], ["Date", dmy(bill.date)]];
@@ -369,7 +375,7 @@ export async function makeBillPdf(bill: BillData): Promise<Blob> {
     y += rowH;
     p.line(M, y, R, y, LINE, 0.6);
   });
-  p.text(`${t.quantity} cylinder${t.quantity === 1 ? "" : "s"} in all`, cols.desc, y + 14, 8.5, { color: MUTED });
+  p.text(`${t.quantity} ${bill.unit ?? "cylinder"}${t.quantity === 1 ? "" : "s"} in all`, cols.desc, y + 14, 8.5, { color: MUTED });
 
   // Totals (right) and words / notes (left) — keep them together on one page.
   const notes = [credit ? `Reason: ${credit.reason || "Bill cancelled"}` : "", bill.note.trim()].filter(Boolean).join("\n");
@@ -426,7 +432,7 @@ export async function makeReceiptPdf(r: ReceiptData): Promise<Blob> {
   const received = r.direction === "in";
   const logo = await logoJpeg(r.yard.logo);
   const p = new Page();
-  header(p, received ? "RECEIPT" : "PAYMENT VOUCHER", r.yard.name, [["Receipt no.", r.receiptNo], ["Date", dmy(r.date)]], received ? PINE : RUST);
+  header(p, r.title ?? (received ? "RECEIPT" : "PAYMENT VOUCHER"), r.yard.name, [["Receipt no.", r.receiptNo], ["Date", dmy(r.date)]], received ? PINE : RUST);
   const y0 = letterhead(p, r.yard, logo);
   const boxTop = logo ? 158 : 112;
   partyBox(p, boxTop, received ? "RECEIVED FROM" : "PAID TO", r.company, []);
