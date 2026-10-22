@@ -85,11 +85,6 @@
   "new": "    <div className=\"flex flex-col gap-4\">\n      <div>\n        <h2 className=\"font-display text-3xl\">Settings</h2>\n        <p className=\"mt-1 text-sm text-muted\">\n          Active account <span className=\"font-semibold text-ink\">{yard.name}</span>. Switching accounts keeps each book separate.\n"
  },
  {
-  "file": "src/components/yard/bills.tsx",
-  "old": "            {yard.address ? <p className=\"mt-1 whitespace-pre-wrap text-muted\">{yard.address}</p> : null}\n            <p className=\"mt-1 text-muted\">\n              {[yard.phone && `Phone ${yard.phone}`, yard.gst && `GST ${yard.gst}`, yard.pan && `PAN ${yard.pan}`].filter(Boolean).join(\" · \") || \"Add letterhead in Setup.\"}\n            </p>\n            <p className=\"mt-4 font-medium\">{kind === \"sale\" ? \"Sale bill\" : \"Purchase bill\"} {billNo}</p>\n",
-  "new": "            {yard.address ? <p className=\"mt-1 whitespace-pre-wrap text-muted\">{yard.address}</p> : null}\n            <p className=\"mt-1 text-muted\">\n              {[yard.phone && `Phone ${yard.phone}`, yard.gst && `GST ${yard.gst}`, yard.pan && `PAN ${yard.pan}`].filter(Boolean).join(\" · \") || \"Add letterhead in Settings.\"}\n            </p>\n            <p className=\"mt-4 font-medium\">{kind === \"sale\" ? \"Sale bill\" : \"Purchase bill\"} {billNo}</p>\n"
- },
- {
   "file": "src/components/yard/yard-panel.tsx",
   "old": "import { useEffect, useState } from \"react\";\nimport { createYard, joinYard, renameYard, switchYard, type YardInfo } from \"@/lib/inventory/api\";\nimport { Field, Panel } from \"@/components/yard/ui\";\n\n",
   "new": "import { useEffect, useState } from \"react\";\nimport { createYard, joinYard, renameYard, rotateInviteCode, switchYard, type YardInfo } from \"@/lib/inventory/api\";\nimport { inviteLink } from \"@/lib/inventory/invite\";\nimport { Field, Panel } from \"@/components/yard/ui\";\n\n"
