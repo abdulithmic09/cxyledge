@@ -34,6 +34,15 @@ const EVENT_WORD: Record<CylinderEvent["kind"], string> = {
 };
 
 /** Yard stock, refilling plant, cylinder lookup and holding charges. */
+type StockTab = "plant" | "count" | "find" | "holding";
+const STOCK_TABS: Array<{ id: StockTab; label: string }> = [
+  { id: "plant", label: "Plant trips" },
+  { id: "count", label: "Stock count" },
+  { id: "find", label: "Find a cylinder" },
+  { id: "holding", label: "Holding charges" },
+];
+let lastStockTab: StockTab = "plant";
+
 export function StockView({ yard, entries, payments, onChanged }: { yard: YardInfo; entries: Entry[]; payments: Payment[]; onChanged: () => void }) {
   const client = useQueryClient();
   const tracking = useQuery({ queryKey: ["tracking"], queryFn: () => getTracking() });
@@ -43,6 +52,11 @@ export function StockView({ yard, entries, payments, onChanged }: { yard: YardIn
   const refresh = () => {
     void client.invalidateQueries({ queryKey: ["tracking"] });
     onChanged();
+  };
+  const [tab, setTabState] = useState<StockTab>(lastStockTab);
+  const setTab = (next: StockTab) => {
+    lastStockTab = next;
+    setTabState(next);
   };
   const totals = rows.reduce((sum, row) => ({ full: sum.full + row.full, empty: sum.empty + row.empty, plant: sum.plant + row.plant, customers: sum.customers + row.customers }), { full: 0, empty: 0, plant: 0, customers: 0 });
 
@@ -68,13 +82,25 @@ export function StockView({ yard, entries, payments, onChanged }: { yard: YardIn
       </div>
 
       <StockTable rows={rows} />
-      <div className="grid gap-4 lg:grid-cols-2">
-        <PlantPanel yard={yard} moves={moves} onSaved={refresh} />
-        <CountPanel yard={yard} onSaved={refresh} />
+
+      <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0" role="tablist" aria-label="Stock tasks">
+        <div className="flex w-max gap-1 rounded-xl border border-line bg-card p-1">
+          {STOCK_TABS.map((item) => (
+            <button key={item.id} type="button" role="tab" aria-selected={tab === item.id} className={cn("btn h-9 shrink-0 px-3 text-sm", tab === item.id ? "btn-pine" : "")} onClick={() => setTab(item.id)}>
+              {item.label}
+            </button>
+          ))}
+        </div>
       </div>
-      <FindCylinder entries={entries} moves={moves} />
-      <HoldingPanel yard={yard} entries={entries} payments={payments} tracking={tracking.data} onChanged={refresh} />
-      <MovesList moves={moves} onChanged={refresh} />
+      {tab === "plant" ? (
+        <>
+          <PlantPanel yard={yard} moves={moves} onSaved={refresh} />
+          <MovesList moves={moves} onChanged={refresh} />
+        </>
+      ) : null}
+      {tab === "count" ? <CountPanel yard={yard} onSaved={refresh} /> : null}
+      {tab === "find" ? <FindCylinder entries={entries} moves={moves} /> : null}
+      {tab === "holding" ? <HoldingPanel yard={yard} entries={entries} payments={payments} tracking={tracking.data} onChanged={refresh} /> : null}
     </div>
   );
 }
@@ -88,7 +114,7 @@ function StockTable({ rows: all }: { rows: ReturnType<typeof yardStock> }) {
     <Panel title="By gas type">
       {uncounted ? (
         <p className="mb-3 rounded-lg bg-sand px-3 py-2 text-sm">
-          Do a stock count once (below) so the yard numbers start from what is really on the floor. After that, bills, returns and plant trips keep them up to date.
+          Do a stock count once (Stock count tab below) so the yard numbers start from what is really on the floor. After that, bills, returns and plant trips keep them up to date.
         </p>
       ) : null}
       <div className="-mx-1 overflow-x-auto">
