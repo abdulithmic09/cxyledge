@@ -14,6 +14,7 @@ import { useRole } from "@/lib/inventory/role";
 import { BillPreview, BillRegister, groupBills, type SavedBill } from "@/components/yard/bill-views";
 import { ChallanForm } from "@/components/yard/challan-form";
 import { getTracking } from "@/lib/inventory/tracking";
+import { clearBillRequest, peekBillRequest } from "@/lib/inventory/nav-requests";
 
 type BillKind = "sale" | "purchase";
 
@@ -237,6 +238,18 @@ export function BillsView({ yard, entries, onChanged }: { yard: YardInfo; entrie
   }
 
   const bills = useMemo(() => groupBills(entries), [entries]);
+
+  // Another screen asked to open a bill (company page, search, "Make bill" after giving cylinders).
+  useEffect(() => {
+    const wanted = peekBillRequest();
+    if (!wanted) return;
+    const bill = bills.find((item) => item.billNo === wanted);
+    if (!bill) return;
+    clearBillRequest();
+    loadBill(bill);
+    window.scrollTo({ top: 0 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bills]);
 
   return (
     <div className="flex flex-col gap-4">
