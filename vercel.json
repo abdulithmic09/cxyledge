@@ -1,4 +1,4 @@
 {
-  "installCommand": "tar xzf app.tgz && cp -R overrides/. . && node apply-patches.mjs && rm -f src/components/yard/backup.tsx src/components/yard/catalog.tsx src/components/yard/days.tsx src/components/yard/summary.tsx src/components/yard/today.tsx src/components/yard/trends.tsx && npm ci --omit=dev --no-audit --no-fund",
+  "installCommand": "tar xzf app.tgz && cp -R overrides/. . && node apply-patches.mjs && sh cleanup.sh && npm ci --omit=dev --no-audit --no-fund",
   "buildCommand": "npm run build"
 }
