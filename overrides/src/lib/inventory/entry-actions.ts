@@ -2,8 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { canEdit, ensureYard, logActivity, NEED_EDIT, sqlClient } from "@/lib/inventory/api";
 
-/** What an Undo right after saving takes back: a new line, or the latest take-back on a delivery. */
-export type UndoTarget = { kind: "entry"; id: string } | { kind: "return"; parentId: string };
+/** What an Undo right after saving takes back: a new line, a payment, or the latest take-back on a delivery. */
+export type UndoTarget = { kind: "entry"; id: string } | { kind: "return"; parentId: string } | { kind: "payment"; id: string };
 
 const UNDO_MINUTES = 15;
 
@@ -24,6 +24,14 @@ export const undoRecent = createServerFn({ method: "POST" })
       if (target.kind === "entry") {
         const rows = await sql<{ id: string }>`
           update entries set deleted_at = now(), deleted_by = ${context.userId}
+          where id = ${String(target.id)} and yard_id = ${yard.id} and created_by = ${context.userId}
+            and created_at > ${since} and deleted_at is null
+          returning id
+        `;
+        undone += rows.length;
+      } else if (target.kind === "payment") {
+        const rows = await sql<{ id: string }>`
+          update payments set deleted_at = now(), deleted_by = ${context.userId}
           where id = ${String(target.id)} and yard_id = ${yard.id} and created_by = ${context.userId}
             and created_at > ${since} and deleted_at is null
           returning id
