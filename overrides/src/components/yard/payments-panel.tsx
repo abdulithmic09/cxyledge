@@ -7,6 +7,8 @@ import { toCsv } from "@/lib/inventory/files";
 import { useRole } from "@/lib/inventory/role";
 import { cn } from "@/lib/cn";
 import { ExportBar } from "@/components/yard/export-bar";
+import { ExportButtons } from "@/components/yard/bills";
+import { makeReceiptPdf, pdfName, type ReceiptData } from "@/lib/inventory/bill-pdf";
 import { Field, Panel } from "@/components/yard/ui";
 
 function todayISO() {
@@ -262,41 +264,79 @@ export function PaymentsPanel({
 }
 
 function ReceiptCard({ yard, payment, balanceAfter }: { yard: YardInfo; payment: Payment; balanceAfter: number | null }) {
-  const lines = receiptLines(yard, payment, balanceAfter);
+  const [note, setNote] = useState("");
   const received = payment.direction === "in";
+  const data: ReceiptData = {
+    yard,
+    direction: payment.direction,
+    receiptNo: payment.receiptNo,
+    date: payment.paidOn,
+    company: payment.companyName,
+    amount: payment.amount,
+    mode: modeLabel(payment.mode),
+    reference: payment.reference,
+    billNo: payment.billNo,
+    note: payment.note,
+    balanceAfter: received ? balanceAfter : null,
+  };
+  const rows: Array<[string, string]> = [
+    ["Mode", modeLabel(payment.mode)],
+    ["Reference", payment.reference || "-"],
+    ["Against bill", payment.billNo || "-"],
+  ];
+  if (payment.note) rows.push(["Note", payment.note]);
   return (
     <div className="mt-5 border-t border-line pt-4">
-      <article className="rounded-xl border border-line bg-paper p-4 text-sm">
-        {yard.logo ? <img src={yard.logo} alt="" className="mb-3 h-12 w-auto" /> : null}
-        <h3 className="font-display text-2xl">{yard.name}</h3>
-        {yard.address ? <p className="mt-1 whitespace-pre-wrap text-muted">{yard.address}</p> : null}
-        <p className="mt-1 text-muted">{[yard.phone && `Phone ${yard.phone}`, yard.gst && `GST ${yard.gst}`].filter(Boolean).join(" · ")}</p>
-        <div className="mt-4 flex flex-wrap items-baseline justify-between gap-2 border-y border-line py-2">
-          <p className="font-semibold tracking-wide">{received ? "PAYMENT RECEIPT" : "PAYMENT VOUCHER"}</p>
-          <p className="tabular-nums text-muted">
-            No. {payment.receiptNo} · {dmy(payment.paidOn)}
-          </p>
+      <article className="overflow-hidden rounded-xl border border-line bg-white text-[13px] text-[#1c1915] shadow-sm">
+        <header className={cn("flex items-start justify-between gap-3 border-b-4 bg-[#1c1915] px-4 py-4 text-white", received ? "border-pine" : "border-rust")}>
+          <div className="min-w-0">
+            <p className="font-display text-2xl font-bold tracking-wide">{received ? "RECEIPT" : "PAYMENT VOUCHER"}</p>
+            <p className="truncate text-xs text-white/70">{yard.name}</p>
+          </div>
+          <dl className="grid shrink-0 grid-cols-[auto_auto] gap-x-3 gap-y-0.5 text-right text-xs">
+            <dt className="text-white/60">Receipt no.</dt>
+            <dd className="font-semibold">{payment.receiptNo}</dd>
+            <dt className="text-white/60">Date</dt>
+            <dd className="font-semibold tabular-nums">{dmy(payment.paidOn)}</dd>
+          </dl>
+        </header>
+        <div className="px-4 py-4">
+          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-rust">{received ? "Received from" : "Paid to"}</p>
+          <p className="mt-1 text-base font-bold">{payment.companyName}</p>
+          <div className={cn("mt-3 rounded-lg border-l-4 bg-[#f3efe6] px-4 py-3", received ? "border-pine" : "border-rust")}>
+            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-rust">{received ? "Amount received" : "Amount paid"}</p>
+            <p className="mt-1 text-2xl font-bold tabular-nums">{rupee(payment.amount)}</p>
+            <p className="text-xs text-[#5e574d]">{rupeesInWords(payment.amount)}</p>
+          </div>
+          <dl className="mt-3 grid grid-cols-[8rem_1fr] gap-y-1.5">
+            {rows.map(([label, value]) => (
+              <div key={label} className="contents">
+                <dt className="text-[#5e574d]">{label}</dt>
+                <dd className="break-words">{value}</dd>
+              </div>
+            ))}
+            {balanceAfter != null && received ? (
+              <div className="contents">
+                <dt className="text-[#5e574d]">Balance still due</dt>
+                <dd className="font-bold tabular-nums">{rupee(balanceAfter)}</dd>
+              </div>
+            ) : null}
+          </dl>
+          <div className="mt-8 flex justify-end text-xs">
+            <div className="w-44 border-t border-[#1c1915] pt-1 text-right">
+              <p className="text-[#5e574d]">Authorised signatory</p>
+              <p className="font-semibold">For {yard.name}</p>
+            </div>
+          </div>
         </div>
-        <p className="mt-3">
-          {received ? "Received with thanks from" : "Paid to"} <span className="font-semibold">{payment.companyName}</span> the sum of{" "}
-          <span className="font-semibold tabular-nums">{rupee(payment.amount)}</span>
-        </p>
-        <p className="mt-1 italic text-muted">({rupeesInWords(payment.amount)})</p>
-        <p className="mt-1">
-          by {modeLabel(payment.mode)}
-          {payment.reference ? `, ref. ${payment.reference}` : ""}
-          {payment.billNo ? `, against bill ${payment.billNo}` : ""}.
-        </p>
-        {payment.note ? <p className="mt-1 text-muted">{payment.note}</p> : null}
-        {balanceAfter != null && received ? <p className="mt-3 tabular-nums">Balance still due: {rupee(balanceAfter)}</p> : null}
-        <p className="mt-6 text-right">
-          For {yard.name}
-          <span className="mt-8 block text-xs text-muted">Authorised signatory</span>
-        </p>
       </article>
-      <div className="mt-3">
-        <ExportBar title={`${received ? "Receipt" : "Voucher"} ${payment.receiptNo}`} filename={`${payment.receiptNo}-${payment.companyName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`} lines={lines} csv={toCsv(["Receipt", "Date", "Company", "Amount", "Mode", "Reference", "Bill"], [[payment.receiptNo, dmy(payment.paidOn), payment.companyName, String(payment.amount), modeLabel(payment.mode), payment.reference, payment.billNo]])} />
-      </div>
+      <ExportButtons
+        onPdf={() => makeReceiptPdf(data)}
+        fileName={pdfName(payment.receiptNo, payment.companyName)}
+        shareTitle={`${received ? "Receipt" : "Voucher"} ${payment.receiptNo} · ${yard.name}`}
+        note={note}
+        setNote={setNote}
+      />
     </div>
   );
 }
