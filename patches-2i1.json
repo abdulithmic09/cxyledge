@@ -10,21 +10,6 @@
   "new": "      <div className=\"grid grid-cols-2 gap-3\">\n        <Stat label=\"Cylinders at customers\" value={stillOut} tone=\"rust\" />\n        <Stat label=\"To collect\" value={rupee(toCollect, 0)} tone=\"pine\" />\n      </div>\n      <OverduePanel entries={entries} payments={payments} yardName={yardName} />\n      <input\n        className=\"field\"\n        value={query}\n        onChange={(event) => setQuery(event.target.value)}\n"
  },
  {
-  "file": "src/components/yard/book.tsx",
-  "old": "        .toLowerCase()\n        .includes(needle);\n    });\n  }, [entries, filter, query]);\n\n  const synced = syncedAt ? new Date(syncedAt).toLocaleTimeString(\"en-IN\", { hour: \"numeric\", minute: \"2-digit\" }) : \"\";\n\n  function applySerials(serialNo: string, base: EntryDraft, touched: boolean): EntryDraft {\n",
-  "new": "        .toLowerCase()\n        .includes(needle);\n    });\n  }, [entries, filter, query]);\n  // Long books render in pages so the phone stays quick.\n  const [limit, setLimit] = useState(60);\n\n  const synced = syncedAt ? new Date(syncedAt).toLocaleTimeString(\"en-IN\", { hour: \"numeric\", minute: \"2-digit\" }) : \"\";\n\n  function applySerials(serialNo: string, base: EntryDraft, touched: boolean): EntryDraft {\n"
- },
- {
-  "file": "src/components/yard/book.tsx",
-  "old": "          ) : null}\n        </div>\n      ) : (\n        <ul className=\"flex flex-col gap-3\">\n          {shown.map((entry) => (\n            <li key={entry.id} className=\"rounded-xl border border-line bg-card p-4\">\n              <div className=\"flex items-start justify-between gap-3\">\n                <div className=\"min-w-0\">\n                  <h3 className=\"font-display text-xl leading-tight\">{entry.companyName}</h3>\n",
-  "new": "          ) : null}\n        </div>\n      ) : (\n        <ul className=\"flex flex-col gap-3\">\n          {shown.slice(0, limit).map((entry) => (\n            <li key={entry.id} className=\"rounded-xl border border-line bg-card p-4\">\n              <div className=\"flex items-start justify-between gap-3\">\n                <div className=\"min-w-0\">\n                  <h3 className=\"font-display text-xl leading-tight\">{entry.companyName}</h3>\n"
- },
- {
-  "file": "src/components/yard/book.tsx",
-  "old": "              </div>\n              ) : null}\n            </li>\n          ))}\n        </ul>\n      )}\n\n      {canEdit ? <ReturnDesk entries={entries} logs={logs} userId={userId} onChanged={onChanged} /> : null}\n",
-  "new": "              </div>\n              ) : null}\n            </li>\n          ))}\n          {shown.length > limit ? (\n            <li>\n              <button type=\"button\" className=\"btn btn-ghost w-full\" onClick={() => setLimit((value) => value + 100)}>\n                Show more ({shown.length - limit} older lines)\n              </button>\n            </li>\n          ) : null}\n        </ul>\n      )}\n\n      {canEdit ? <ReturnDesk entries={entries} logs={logs} userId={userId} onChanged={onChanged} /> : null}\n"
- },
- {
   "file": "src/lib/inventory/api.ts",
   "old": "             movement, unit_price::float8 as unit_price, bill_no, parent_id, cylinder_type\n      from entries\n      where yard_id = ${yard.id} and deleted_at is null and cancelled_at is null\n      order by entry_date desc, updated_at desc\n      limit 2000\n    `;\n    return rows.map(mapEntry);\n  });\n\n",
   "new": "             movement, unit_price::float8 as unit_price, bill_no, parent_id, cylinder_type\n      from entries\n      where yard_id = ${yard.id} and deleted_at is null and cancelled_at is null\n      order by entry_date desc, updated_at desc\n      limit 20000\n    `;\n    return rows.map(mapEntry);\n  });\n\n"
