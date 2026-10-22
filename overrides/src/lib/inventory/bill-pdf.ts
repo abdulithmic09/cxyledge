@@ -29,6 +29,8 @@ export type BillData = {
   title?: string;
   /** What the quantity counts (default "cylinder"), e.g. "cylinder-day". */
   unit?: string;
+  /** Delivery challan: no prices or totals, with vehicle details and the receiver's signature. */
+  challan?: { vehicle: string; driver: string; receiver: string; signature: string; billedAs?: string };
 };
 
 export type ReceiptData = {
@@ -139,8 +141,8 @@ class Page {
     this.color(opts.color ?? INK);
     this.ops.push(`BT /${bold ? "F2" : "F1"} ${size} Tf ${opts.spacing ? `${opts.spacing} Tc ` : ""}${left.toFixed(2)} ${(H - top).toFixed(2)} Td (${pdfText(str)}) Tj${opts.spacing ? " 0 Tc" : ""} ET`);
   }
-  image(x: number, top: number, w: number, h: number) {
-    this.ops.push(`q ${w.toFixed(2)} 0 0 ${h.toFixed(2)} ${x.toFixed(2)} ${(H - top - h).toFixed(2)} cm /Im1 Do Q`);
+  image(x: number, top: number, w: number, h: number, name = "Im1") {
+    this.ops.push(`q ${w.toFixed(2)} 0 0 ${h.toFixed(2)} ${x.toFixed(2)} ${(H - top - h).toFixed(2)} cm /${name} Do Q`);
   }
 }
 
@@ -190,8 +192,8 @@ async function logoJpeg(dataUrl: string): Promise<Logo | null> {
   }
 }
 
-/** Objects: 1 catalog, 2 pages, 3/4 fonts, 5 image (or empty), then content+page pairs. */
-function assemble(pages: Page[], logo: Logo | null): Blob {
+/** Objects: 1 catalog, 2 pages, 3/4 fonts, then one per image (Im1, Im2…), then content+page pairs. */
+function assemble(pages: Page[], logo: Logo | null, extra: Logo | null = null): Blob {
   const enc = new TextEncoder();
   const parts: Uint8Array[] = [];
   const offsets: number[] = [];
@@ -207,25 +209,27 @@ function assemble(pages: Page[], logo: Logo | null): Blob {
     for (const piece of Array.isArray(body) ? body : [body]) push(piece);
     push("\nendobj\n");
   };
-  const pageIds = pages.map((_, index) => 7 + index * 2);
+  const images = [logo ? { name: "Im1", img: logo } : null, extra ? { name: "Im2", img: extra } : null].filter(Boolean) as Array<{ name: string; img: Logo }>;
+  const first = 5 + images.length;
+  const pageIds = pages.map((_, index) => first + 1 + index * 2);
   push("%PDF-1.4\n%\xE2\xE3\xCF\xD3\n");
-  const resources = `<< /Font << /F1 3 0 R /F2 4 0 R >>${logo ? " /XObject << /Im1 5 0 R >>" : ""} >>`;
+  const xobjects = images.map((item, index) => `/${item.name} ${5 + index} 0 R`).join(" ");
+  const resources = `<< /Font << /F1 3 0 R /F2 4 0 R >>${images.length ? ` /XObject << ${xobjects} >>` : ""} >>`;
   obj(1, "<< /Type /Catalog /Pages 2 0 R >>");
   obj(2, `<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pages.length} >>`);
   obj(3, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
   obj(4, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>");
-  if (logo) {
-    obj(5, [`<< /Type /XObject /Subtype /Image /Width ${logo.w} /Height ${logo.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${logo.bytes.length} >>\nstream\n`, logo.bytes, "\nendstream"]);
-  } else {
-    obj(5, "<< >>");
-  }
+  images.forEach((item, index) => {
+    const { img } = item;
+    obj(5 + index, [`<< /Type /XObject /Subtype /Image /Width ${img.w} /Height ${img.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${img.bytes.length} >>\nstream\n`, img.bytes, "\nendstream"]);
+  });
   pages.forEach((page, index) => {
     const content = page.ops.join("\n");
-    const contentId = 6 + index * 2;
+    const contentId = first + index * 2;
     obj(contentId, `<< /Length ${enc.encode(content).length} >>\nstream\n${content}\nendstream`);
     obj(pageIds[index]!, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources ${resources} /Contents ${contentId} 0 R >>`);
   });
-  const count = 6 + pages.length * 2;
+  const count = first + pages.length * 2 - 1;
   const xref = size;
   push(`xref\n0 ${count + 1}\n0000000000 65535 f \n`);
   for (let id = 1; id <= count; id += 1) push(`${String(offsets[id] ?? 0).padStart(10, "0")} 00000 n \n`);
@@ -309,15 +313,19 @@ export async function makeBillPdf(bill: BillData): Promise<Blob> {
   const t = billTotals(bill);
   const sale = bill.kind === "sale";
   const credit = bill.credit;
+  const challan = bill.challan;
   const logo = await logoJpeg(yard.logo);
+  const sign = challan?.signature ? await logoJpeg(challan.signature) : null;
   const pages: Page[] = [];
   let p = new Page();
   pages.push(p);
 
-  const title = credit ? "CREDIT NOTE" : (bill.title ?? (sale ? "BILL" : "PURCHASE BILL"));
+  const title = credit ? "CREDIT NOTE" : challan ? "DELIVERY CHALLAN" : (bill.title ?? (sale ? "BILL" : "PURCHASE BILL"));
   const fields: Array<[string, string]> = credit
     ? [["Credit note", credit.no], ["Date", dmy(credit.date)], ["Against bill", bill.billNo || "-"]]
-    : [["Bill no.", bill.billNo || "-"], ["Date", dmy(bill.date)]];
+    : challan
+      ? [["Challan no.", bill.billNo || "-"], ["Date", dmy(bill.date)], ...(challan.vehicle ? ([["Vehicle", challan.vehicle]] as Array<[string, string]>) : [])]
+      : [["Bill no.", bill.billNo || "-"], ["Date", dmy(bill.date)]];
   header(p, title, yard.name, fields, credit ? PINE : RUST);
 
   const y0 = letterhead(p, yard, logo);
@@ -325,8 +333,9 @@ export async function makeBillPdf(bill: BillData): Promise<Blob> {
   const extra: Array<{ text: string; bold?: boolean; color?: RGB }> = [];
   if (bill.companyPhone) extra.push({ text: `Phone ${bill.companyPhone}` });
   if (credit) extra.push({ text: `Bill dated ${dmy(bill.date)}`, bold: true, color: PINE });
+  else if (challan) extra.push({ text: challan.billedAs ? `Billed as ${challan.billedAs}` : "Goods sent for delivery", bold: true, color: PINE });
   else extra.push({ text: `Payment: ${STATUS_WORD[bill.payment]}`, bold: true, color: bill.payment === "received" ? PINE : RUST });
-  partyBox(p, boxTop, credit ? "ISSUED TO" : sale ? "BILL TO" : "SUPPLIER", bill.company, extra);
+  partyBox(p, boxTop, credit ? "ISSUED TO" : challan ? "DELIVER TO" : sale ? "BILL TO" : "SUPPLIER", bill.company, extra);
 
   // Items table
   let y = Math.max(y0, boxTop + 70) + 22;
@@ -336,9 +345,13 @@ export async function makeBillPdf(bill: BillData): Promise<Blob> {
     const hy = y + 15.5;
     p.text("#", cols.no, hy, 8.5, { bold: true, color: WHITE });
     p.text("DESCRIPTION", cols.desc, hy, 8.5, { bold: true, color: WHITE, spacing: 0.6 });
-    p.text("QTY", cols.qty, hy, 8.5, { bold: true, color: WHITE, align: "right", spacing: 0.6 });
-    p.text("RATE", cols.rate, hy, 8.5, { bold: true, color: WHITE, align: "right", spacing: 0.6 });
-    p.text("AMOUNT", cols.amt, hy, 8.5, { bold: true, color: WHITE, align: "right", spacing: 0.6 });
+    if (challan) {
+      p.text("QTY", cols.amt, hy, 8.5, { bold: true, color: WHITE, align: "right", spacing: 0.6 });
+    } else {
+      p.text("QTY", cols.qty, hy, 8.5, { bold: true, color: WHITE, align: "right", spacing: 0.6 });
+      p.text("RATE", cols.rate, hy, 8.5, { bold: true, color: WHITE, align: "right", spacing: 0.6 });
+      p.text("AMOUNT", cols.amt, hy, 8.5, { bold: true, color: WHITE, align: "right", spacing: 0.6 });
+    }
     y += 24;
   };
   const newPage = () => {
@@ -353,7 +366,7 @@ export async function makeBillPdf(bill: BillData): Promise<Blob> {
   };
   tableHead();
 
-  const descWidth = cols.qty - 50 - cols.desc;
+  const descWidth = (challan ? cols.amt - 60 : cols.qty - 50) - cols.desc;
   const lines = bill.lines.length ? bill.lines : [{ cylinderType: "", serials: [], quantity: 0, price: null }];
   lines.forEach((line, index) => {
     const serialLines = line.serials.length ? wrap(`Serial nos.: ${line.serials.join(", ")}`, 8.5, descWidth) : [];
@@ -369,13 +382,43 @@ export async function makeBillPdf(bill: BillData): Promise<Blob> {
       p.text(text, cols.desc, sy, 8.5, { color: MUTED });
       sy += 11;
     }
-    p.text(String(line.quantity), cols.qty, y + 19, 10, { align: "right" });
-    p.text(line.price != null ? rs(line.price) : "-", cols.rate, y + 19, 10, { align: "right" });
-    p.text(line.price != null ? rs(lineAmount(line)) : "-", cols.amt, y + 19, 10, { bold: true, align: "right" });
+    if (challan) {
+      p.text(String(line.quantity), cols.amt, y + 19, 11, { bold: true, align: "right" });
+    } else {
+      p.text(String(line.quantity), cols.qty, y + 19, 10, { align: "right" });
+      p.text(line.price != null ? rs(line.price) : "-", cols.rate, y + 19, 10, { align: "right" });
+      p.text(line.price != null ? rs(lineAmount(line)) : "-", cols.amt, y + 19, 10, { bold: true, align: "right" });
+    }
     y += rowH;
     p.line(M, y, R, y, LINE, 0.6);
   });
   p.text(`${t.quantity} ${bill.unit ?? "cylinder"}${t.quantity === 1 ? "" : "s"} in all`, cols.desc, y + 14, 8.5, { color: MUTED });
+
+  if (challan) {
+    if (y + 230 > H - 60) newPage();
+    let cy = y + 40;
+    const info: Array<[string, string]> = [
+      ["Vehicle no.", challan.vehicle || "-"],
+      ["Driver", challan.driver || "-"],
+      ["Received by", challan.receiver || "-"],
+    ];
+    if (bill.note.trim()) info.push(["Notes", bill.note.trim()]);
+    for (const [label, value] of info) {
+      p.text(label, M, cy, 9.5, { color: MUTED });
+      wrap(value, 10, 260).slice(0, 2).forEach((line, index) => p.text(line, M + 90, cy + index * 13, 10, { bold: label === "Received by" }));
+      cy += label === "Notes" ? 30 : 18;
+    }
+    const sigTop = cy + (sign ? 72 : 40);
+    if (sign) {
+      const sh = 54;
+      const sw = Math.min(180, (sign.w / sign.h) * sh);
+      p.image(M, sigTop - sh - 4, sw, sh, "Im2");
+    }
+    signatures(p, sigTop, "Receiver's signature", challan.receiver || bill.company, yard.name);
+    p.text("Received the above cylinders in good condition.", M, sigTop + 44, 8.5, { color: MUTED });
+    footer(p, "Delivery challan, not a bill.", `${bill.billNo}  ·  ${dmy(bill.date)}  ·  Made with Cxyledge`);
+    return assemble(pages, logo, sign);
+  }
 
   // Totals (right) and words / notes (left) — keep them together on one page.
   const notes = [credit ? `Reason: ${credit.reason || "Bill cancelled"}` : "", bill.note.trim()].filter(Boolean).join("\n");
