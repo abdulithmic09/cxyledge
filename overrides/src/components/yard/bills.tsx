@@ -12,6 +12,8 @@ import { cn } from "@/lib/cn";
 import { Field, Panel } from "@/components/yard/ui";
 import { useRole } from "@/lib/inventory/role";
 import { BillPreview, BillRegister, groupBills, type SavedBill } from "@/components/yard/bill-views";
+import { ChallanForm } from "@/components/yard/challan-form";
+import { getTracking } from "@/lib/inventory/tracking";
 
 type BillKind = "sale" | "purchase";
 
@@ -54,7 +56,8 @@ function nextBillNo(entries: Entry[], cancelled: CancelledBill[], date: string) 
 
 export function BillsView({ yard, entries, onChanged }: { yard: YardInfo; entries: Entry[]; onChanged: () => void }) {
   const { canEdit, isOwner } = useRole();
-  const [tab, setTab] = useState<"new" | "all">("new");
+  const [tab, setTab] = useState<"new" | "challan" | "all">("new");
+  const tracking = useQuery({ queryKey: ["tracking"], queryFn: () => getTracking() });
   const metaQuery = useQuery({ queryKey: ["company-meta"], queryFn: () => listCompanyMeta() });
   const cancelledQuery = useQuery({ queryKey: ["cancelled-bills"], queryFn: () => listCancelledBills() });
   const cancelled = useMemo(() => cancelledQuery.data ?? [], [cancelledQuery.data]);
@@ -162,18 +165,20 @@ export function BillsView({ yard, entries, onChanged }: { yard: YardInfo; entrie
   }
 
   function loadBill(savedBill: SavedBill) {
+    const fromChallan = savedBill.billNo.startsWith("DC/");
     setTab("new");
     setEditing(savedBill.billNo);
     setBillNoTouched(true);
     setKind(savedBill.kind);
     setDate(savedBill.date);
-    setBillNo(savedBill.billNo);
+    setBillNo(fromChallan ? nextBillNo(entries, cancelled, savedBill.date) : savedBill.billNo);
     setCompany(savedBill.company);
     setLines(
       savedBill.entries.map((entry) => {
         const line = blankLine(entry.cylinderType);
         const serials = splitSerials(entry.serialNo);
-        return { ...line, serialNo: serials.join("\n"), qtyOverride: serials.length !== entry.quantity, quantity: entry.quantity, price: entry.unitPrice };
+        const hint = fromChallan && entry.unitPrice == null ? suggestPrice(entry.cylinderType, savedBill.company) : { price: entry.unitPrice, from: "" as const };
+        return { ...line, serialNo: serials.join("\n"), qtyOverride: serials.length !== entry.quantity, quantity: entry.quantity, price: hint.price, priceFrom: hint.from };
       }),
     );
     const sum = Math.round(savedBill.lines.reduce((acc, line) => acc + lineAmount(line), 0) * 100) / 100;
@@ -240,17 +245,19 @@ export function BillsView({ yard, entries, onChanged }: { yard: YardInfo; entrie
           <h2 className="font-display text-3xl">Bills</h2>
           <p className="mt-1 text-sm text-muted">Sale and purchase bills on your letterhead, numbered by financial year and kept in each company&apos;s files.</p>
         </div>
-        <div className="grid grid-cols-2 gap-1 rounded-xl border border-line bg-card p-1" role="tablist">
-          {(["new", "all"] as const).map((item) => (
-            <button key={item} type="button" role="tab" aria-selected={tab === item} className={cn("btn h-9 px-4 text-sm", tab === item ? "btn-pine" : "")} onClick={() => setTab(item)}>
-              {item === "new" ? (editing ? "Edit bill" : "New bill") : `All bills (${bills.length})`}
+        <div className="grid grid-cols-3 gap-1 rounded-xl border border-line bg-card p-1" role="tablist">
+          {(["new", "challan", "all"] as const).map((item) => (
+            <button key={item} type="button" role="tab" aria-selected={tab === item} className={cn("btn h-9 px-3 text-sm sm:px-4", tab === item ? "btn-pine" : "")} onClick={() => setTab(item)}>
+              {item === "new" ? (editing ? (editing.startsWith("DC/") ? "Bill challan" : "Edit bill") : "New bill") : item === "challan" ? "Challan" : `All (${bills.length})`}
             </button>
           ))}
         </div>
       </div>
 
+      {tab === "challan" ? <ChallanForm yard={yard} entries={entries} onSaved={onChanged} /> : null}
       {tab === "all" ? (
         <BillRegister
+          challans={tracking.data?.challans ?? []}
           yard={yard}
           bills={bills}
           cancelled={cancelled}
@@ -263,13 +270,14 @@ export function BillsView({ yard, entries, onChanged }: { yard: YardInfo; entrie
             onChanged();
           }}
         />
-      ) : (
+      ) : null}
+      {tab === "new" ? (
         <div className="grid gap-4 lg:grid-cols-2">
-          <Panel title={editing ? `Editing bill ${editing}` : "New bill"}>
+          <Panel title={editing ? (editing.startsWith("DC/") ? `Bill for challan ${editing}` : `Editing bill ${editing}`) : "New bill"}>
             <div className="grid gap-3">
               {editing ? (
                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-sand px-3 py-2 text-sm">
-                  <span>Saving replaces the old lines and PDF of this bill.</span>
+                  <span>{editing.startsWith("DC/") ? "Add prices and save. The challan's cylinders become this bill; the signed challan stays in the files." : "Saving replaces the old lines and PDF of this bill."}</span>
                   <button type="button" className="btn btn-ghost h-9 px-3 text-sm" onClick={() => resetForm()}>
                     Stop editing
                   </button>
@@ -379,7 +387,7 @@ export function BillsView({ yard, entries, onChanged }: { yard: YardInfo; entrie
             <ExportButtons onPdf={() => makeBillPdf(bill)} fileName={fileName} shareTitle={`${billNo} · ${yard.name}`} csv={csv} note={exportNote} setNote={setExportNote} />
           </Panel>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
