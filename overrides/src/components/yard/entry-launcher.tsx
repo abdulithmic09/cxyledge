@@ -1,17 +1,24 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, ChevronLeft, PackagePlus, Plus, X } from "lucide-react";
+import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, ChevronLeft, IndianRupee, PackagePlus, Plus, X } from "lucide-react";
 import {
   createEntry,
+  createPayment,
   listCompanyMeta,
   parseEntry,
+  PAYMENT_MODES,
   recordReturn,
   updateEntry,
   type Entry,
   type EntryDraft,
   type Payment,
+  type PaymentDirection,
+  type PaymentMode,
   type PaymentStatus,
+  type YardInfo,
 } from "@/lib/inventory/api";
+import { makeReceiptPdf, pdfName } from "@/lib/inventory/bill-pdf";
+import { downloadBlob } from "@/lib/inventory/files";
 import { companyBalances, openOrders, type OpenOrder } from "@/lib/inventory/analyse";
 import { undoRecent, type UndoTarget } from "@/lib/inventory/entry-actions";
 import { formatDay } from "@/lib/inventory/model";
@@ -21,7 +28,7 @@ import { cn } from "@/lib/cn";
 import { TypePicker } from "@/components/yard/type-picker";
 import { Field } from "@/components/yard/ui";
 
-type Mode = "give" | "take" | "exchange" | "bought";
+export type Mode = "give" | "take" | "exchange" | "bought" | "money";
 
 /* ---------- opening the sheet from anywhere (Book's Edit button, empty states) ---------- */
 
@@ -29,7 +36,7 @@ const OPEN_EVENT = "cx:entry-sheet";
 const SHOW_EVENT = "cx:show-entry";
 let pendingShow: string | null = null;
 
-export function openEntrySheet(options: { entry?: Entry; mode?: Mode } = {}) {
+export function openEntrySheet(options: { entry?: Entry; mode?: Mode; company?: string } = {}) {
   window.dispatchEvent(new CustomEvent(OPEN_EVENT, { detail: options }));
 }
 
@@ -59,6 +66,7 @@ const MODES: Array<{ id: Mode; title: string; hint: string; icon: typeof Plus }>
   { id: "take", title: "Take back", hint: "Empties coming back from a customer", icon: ArrowDownLeft },
   { id: "exchange", title: "Exchange", hint: "Empties in and full ones out, in one go", icon: ArrowLeftRight },
   { id: "bought", title: "Bought stock", hint: "Cylinders you bought from a supplier", icon: PackagePlus },
+  { id: "money", title: "Money received", hint: "A payment from a customer, with a receipt", icon: IndianRupee },
 ];
 
 function todayISO() {
@@ -121,15 +129,17 @@ function fingerprint(draft: EntryDraft) {
 
 /* ---------- the launcher: + button, sheet and the "Saved" note ---------- */
 
-type Toast = { text: string; undo: UndoTarget[]; entryId: string | null };
+type Toast = { text: string; undo: UndoTarget[]; entryId: string | null; receipt?: Payment; balanceAfter?: number | null };
 
 export function EntryLauncher({
+  yard,
   entries,
   payments,
   cylinderTypes,
   onChanged,
   onShowBook,
 }: {
+  yard: YardInfo;
   entries: Entry[];
   payments: Payment[];
   cylinderTypes: string[];
@@ -137,15 +147,15 @@ export function EntryLauncher({
   onShowBook: () => void;
 }) {
   const { canEdit } = useRole();
-  const [sheet, setSheet] = useState<{ key: number; mode: Mode | null; entry: Entry | null } | null>(null);
+  const [sheet, setSheet] = useState<{ key: number; mode: Mode | null; entry: Entry | null; company: string } | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   const [undoNote, setUndoNote] = useState("");
   const [undoing, setUndoing] = useState(false);
 
   useEffect(() => {
     const listener = (event: Event) => {
-      const detail = (event as CustomEvent<{ entry?: Entry; mode?: Mode }>).detail ?? {};
-      setSheet({ key: Date.now(), mode: detail.entry ? null : (detail.mode ?? null), entry: detail.entry ?? null });
+      const detail = (event as CustomEvent<{ entry?: Entry; mode?: Mode; company?: string }>).detail ?? {};
+      setSheet({ key: Date.now(), mode: detail.entry ? null : (detail.mode ?? null), entry: detail.entry ?? null, company: detail.company ?? "" });
     };
     window.addEventListener(OPEN_EVENT, listener);
     return () => window.removeEventListener(OPEN_EVENT, listener);
@@ -153,7 +163,7 @@ export function EntryLauncher({
 
   useEffect(() => {
     if (!toast) return;
-    const timer = window.setTimeout(() => setToast(null), 15000);
+    const timer = window.setTimeout(() => setToast(null), 10000);
     return () => window.clearTimeout(timer);
   }, [toast]);
 
@@ -181,7 +191,7 @@ export function EntryLauncher({
         <button
           type="button"
           className="no-print btn btn-rust fixed bottom-[5.25rem] right-4 z-30 h-14 gap-2 rounded-full px-5 text-base shadow-lg shadow-ink/25 lg:bottom-8 lg:right-8"
-          onClick={() => setSheet({ key: Date.now(), mode: null, entry: null })}
+          onClick={() => setSheet({ key: Date.now(), mode: null, entry: null, company: "" })}
         >
           <Plus className="size-5" aria-hidden />
           New entry
@@ -194,7 +204,31 @@ export function EntryLauncher({
             <span className="min-w-0 flex-1">{toast ? toast.text : undoNote}</span>
             {toast ? (
               <>
-                {toast.entryId !== undefined ? (
+                {toast.receipt ? (
+                  <button
+                    type="button"
+                    className="font-semibold underline"
+                    onClick={() => {
+                      const payment = toast.receipt!;
+                      void makeReceiptPdf({
+                        yard,
+                        direction: payment.direction === "out" ? "out" : "in",
+                        receiptNo: payment.receiptNo,
+                        date: payment.paidOn,
+                        company: payment.companyName,
+                        amount: payment.amount,
+                        mode: PAYMENT_MODES.find((item) => item.id === payment.mode)?.label ?? payment.mode,
+                        reference: payment.reference,
+                        billNo: payment.billNo,
+                        note: payment.note,
+                        balanceAfter: payment.direction === "in" ? (toast.balanceAfter ?? null) : null,
+                      }).then((pdf) => downloadBlob(pdfName(payment.receiptNo, payment.companyName), pdf));
+                    }}
+                  >
+                    {toast.receipt.direction === "in" ? "Receipt" : "Voucher"}
+                  </button>
+                ) : null}
+                {toast.entryId ? (
                   <button
                     type="button"
                     className="font-semibold underline"
@@ -227,6 +261,7 @@ export function EntryLauncher({
           key={sheet.key}
           initialMode={sheet.mode}
           editing={sheet.entry}
+          initialCompany={sheet.company}
           entries={entries}
           payments={payments}
           cylinderTypes={cylinderTypes}
@@ -251,6 +286,7 @@ type Counts = Record<string, number>;
 function EntrySheet({
   initialMode,
   editing,
+  initialCompany,
   entries,
   payments,
   cylinderTypes,
@@ -259,6 +295,7 @@ function EntrySheet({
 }: {
   initialMode: Mode | null;
   editing: Entry | null;
+  initialCompany: string;
   entries: Entry[];
   payments: Payment[];
   cylinderTypes: string[];
@@ -267,7 +304,7 @@ function EntrySheet({
 }) {
   const [mode, setMode] = useState<Mode | null>(editing ? (editing.movement === "purchase" ? "bought" : "give") : initialMode);
   const [draft, setDraft] = useState<EntryDraft>(() =>
-    editing ? draftFrom(editing) : blankDraft(initialMode === "bought" ? "purchase" : "delivery"),
+    editing ? draftFrom(editing) : { ...blankDraft(initialMode === "bought" ? "purchase" : "delivery"), companyName: initialCompany },
   );
   const [finalTouched, setFinalTouched] = useState(() =>
     editing ? editing.unitPrice != null && editing.amountDue !== subtotal(editing.quantity, editing.unitPrice) : false,
@@ -275,6 +312,7 @@ function EntrySheet({
   const [picks, setPicks] = useState<Picks>({});
   const [counts, setCounts] = useState<Counts>({});
   const [backNote, setBackNote] = useState("");
+  const [money, setMoney] = useState<MoneyDraft>(blankMoney);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
@@ -294,7 +332,7 @@ function EntrySheet({
   const givesOut = mode === "give" || mode === "exchange" || mode === "bought";
   const backTotal = orders.reduce((sum, order) => sum + (order.leftSerials.length ? (picks[order.entry.id]?.length ?? 0) : (counts[order.entry.id] ?? 0)), 0);
   const [initial] = useState(() => fingerprint(draft));
-  const dirty = fingerprint(draft) !== initial || backTotal > 0;
+  const dirty = fingerprint(draft) !== initial || backTotal > 0 || Boolean(money.amount || money.reference || money.note);
 
   // Keep the page behind still, and close on Escape.
   useEffect(() => {
@@ -368,6 +406,10 @@ function EntrySheet({
       setError("Enter the company name.");
       return;
     }
+    if (mode === "money") {
+      await saveMoney();
+      return;
+    }
     const giving = givesOut ? parseEntry(draft) : null;
     if (giving && !giving.ok) {
       setError(giving.error);
@@ -434,6 +476,37 @@ function EntrySheet({
     }
   }
 
+  async function saveMoney() {
+    const amount = Number(money.amount.replace(/[^\d.]/g, ""));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError("Enter the amount.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const company = draft.companyName.trim();
+      const result = await createPayment({
+        data: { companyName: company, direction: money.direction, amount, paidOn: draft.entryDate, mode: money.mode, reference: money.reference, billNo: money.billNo, note: money.note },
+      });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      const after = money.direction === "in" && balance ? Math.max(0, Math.round((balance.toCollect - amount) * 100) / 100) : null;
+      onSaved({
+        text: `${result.payment.receiptNo}: ${rupee(amount)} ${money.direction === "in" ? "received from" : "paid to"} ${company}.`,
+        undo: [{ kind: "payment", id: result.payment.id }],
+        entryId: null,
+        receipt: result.payment,
+        balanceAfter: after,
+      });
+    } catch {
+      setError("Could not save. Check your internet connection.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const title = editing ? "Edit entry" : mode ? MODES.find((item) => item.id === mode)!.title : "New entry";
   const saveLabel = editing
     ? "Save changes"
@@ -443,7 +516,11 @@ function EntrySheet({
         : "Take back"
       : mode === "exchange"
         ? "Save exchange"
-        : "Add to the book";
+        : mode === "money"
+          ? money.direction === "in"
+            ? "Save and make receipt"
+            : "Save payment made"
+          : "Add to the book";
 
   return (
     <div className="no-print fixed inset-0 z-50 flex lg:items-center lg:justify-center lg:bg-ink/40 lg:p-6" role="dialog" aria-modal="true" aria-label={title}>
@@ -485,14 +562,19 @@ function EntrySheet({
                     <button
                       key={item.id}
                       type="button"
-                      className="flex min-h-32 flex-col items-start gap-2 rounded-xl border border-line bg-card p-4 text-left transition hover:border-pine hover:bg-sand focus-visible:border-pine"
+                      className={cn(
+                        "flex min-h-32 flex-col items-start gap-2 rounded-xl border border-line bg-card p-4 text-left transition hover:border-pine hover:bg-sand focus-visible:border-pine",
+                        item.id === "money" && "col-span-2 min-h-0 flex-row items-center",
+                      )}
                       onClick={() => choose(item.id)}
                     >
-                      <span className={cn("grid size-10 place-items-center rounded-full", item.id === "take" ? "bg-pine text-pine-fg" : item.id === "bought" ? "bg-sand text-ink" : "bg-rust text-rust-fg")}>
+                      <span className={cn("grid size-10 shrink-0 place-items-center rounded-full", item.id === "take" || item.id === "money" ? "bg-pine text-pine-fg" : item.id === "bought" ? "bg-sand text-ink" : "bg-rust text-rust-fg")}>
                         <Icon className="size-5" aria-hidden />
                       </span>
-                      <span className="font-semibold leading-tight">{item.title}</span>
-                      <span className="text-xs leading-snug text-muted">{item.hint}</span>
+                      <span className={cn(item.id === "money" ? "flex min-w-0 flex-col gap-0.5" : "contents")}>
+                        <span className="font-semibold leading-tight">{item.title}</span>
+                        <span className="text-xs leading-snug text-muted">{item.hint}</span>
+                      </span>
                     </button>
                   );
                 })}
@@ -535,6 +617,17 @@ function EntrySheet({
                   <span className="font-semibold">{balance.company}</span> has {balance.outstandingQty} cylinder{balance.outstandingQty === 1 ? "" : "s"} out
                   {balance.toCollect ? ` · ${rupee(balance.toCollect, 0)} to collect` : ""}.
                 </p>
+              ) : null}
+
+              {mode === "money" ? (
+                <MoneyFields
+                  money={money}
+                  setMoney={setMoney}
+                  due={balance?.toCollect ?? 0}
+                  owed={balance?.toPay ?? 0}
+                  canPayOut={entries.some((entry) => entry.movement === "purchase" && same(entry.companyName, draft.companyName))}
+                  bills={[...new Set(entries.filter((entry) => entry.billNo && same(entry.companyName, draft.companyName)).map((entry) => entry.billNo))].sort().reverse()}
+                />
               ) : null}
 
               {takesBack ? (
@@ -882,6 +975,81 @@ function LineFields({
       <Field label="Note">
         <input className="field" value={draft.note} maxLength={300} onChange={(event) => setDraft({ ...draft, note: event.target.value })} />
       </Field>
+    </div>
+  );
+}
+
+/* ---------- money received (or paid to a supplier) ---------- */
+
+type MoneyDraft = { direction: PaymentDirection; amount: string; mode: PaymentMode; reference: string; billNo: string; note: string };
+
+const blankMoney = (): MoneyDraft => ({ direction: "in", amount: "", mode: "cash", reference: "", billNo: "", note: "" });
+
+function MoneyFields({
+  money,
+  setMoney,
+  due,
+  owed,
+  canPayOut,
+  bills,
+}: {
+  money: MoneyDraft;
+  setMoney: (next: MoneyDraft) => void;
+  due: number;
+  owed: number;
+  canPayOut: boolean;
+  bills: string[];
+}) {
+  const left = money.direction === "in" ? due : owed;
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      {canPayOut ? (
+        <div className="grid grid-cols-2 gap-2 sm:col-span-2">
+          {(["in", "out"] as const).map((item) => (
+            <button key={item} type="button" className={cn("btn", money.direction === item ? "btn-pine" : "btn-ghost")} onClick={() => setMoney({ ...money, direction: item })}>
+              {item === "in" ? "Received from them" : "Paid to them"}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <Field label="Amount (₹)" hint={left > 0 ? `${money.direction === "in" ? "Still to collect" : "Still to pay"} ${rupee(left, 0)}. Part-payments are fine.` : undefined}>
+        <input className="field tabular-nums text-lg" inputMode="decimal" value={money.amount} onChange={(event) => setMoney({ ...money, amount: event.target.value.replace(/[^\d.]/g, "") })} placeholder="0" />
+      </Field>
+      {left > 0 ? (
+        <div className="flex items-end">
+          <button type="button" className="btn btn-ghost w-full" onClick={() => setMoney({ ...money, amount: String(left) })}>
+            Full amount {rupee(left, 0)}
+          </button>
+        </div>
+      ) : (
+        <span className="hidden sm:block" />
+      )}
+      <fieldset className="sm:col-span-2">
+        <legend className="mb-1.5 text-sm font-medium">Paid by</legend>
+        <div className="flex flex-wrap gap-2">
+          {PAYMENT_MODES.map((item) => (
+            <button key={item.id} type="button" className={cn("btn px-3 text-sm", money.mode === item.id ? "btn-pine" : "btn-ghost")} onClick={() => setMoney({ ...money, mode: item.id })}>
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </fieldset>
+      <Field label={money.mode === "cheque" ? "Cheque no." : money.mode === "upi" || money.mode === "bank" ? "UTR / transaction ID" : "Reference"}>
+        <input className="field" value={money.reference} maxLength={60} onChange={(event) => setMoney({ ...money, reference: event.target.value })} />
+      </Field>
+      <Field label="Against bill (optional)">
+        <input className="field" value={money.billNo} maxLength={40} list="sheet-money-bills" onChange={(event) => setMoney({ ...money, billNo: event.target.value })} />
+        <datalist id="sheet-money-bills">
+          {bills.map((bill) => (
+            <option key={bill} value={bill} />
+          ))}
+        </datalist>
+      </Field>
+      <div className="sm:col-span-2">
+        <Field label="Note">
+          <input className="field" value={money.note} maxLength={300} onChange={(event) => setMoney({ ...money, note: event.target.value })} />
+        </Field>
+      </div>
     </div>
   );
 }
