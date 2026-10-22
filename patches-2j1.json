@@ -1,0 +1,17 @@
+[
+ {
+  "file": "src/components/yard/app.tsx",
+  "old": "import { StockView } from \"@/components/yard/stock-view\";\nimport { SettingsView } from \"@/components/yard/settings\";\nimport { BalancesView } from \"@/components/yard/balances\";\nimport { UsersView } from \"@/components/yard/users\";\n\nconst AnalyticsView = lazy(() => import(\"@/components/yard/analytics\"));\n\ntype View = \"book\" | \"balance\" | \"analyse\" | \"companies\" | \"bills\" | \"stock\" | \"users\" | \"setup\";\n",
+  "new": "import { StockView } from \"@/components/yard/stock-view\";\nimport { SettingsView } from \"@/components/yard/settings\";\nimport { BalancesView } from \"@/components/yard/balances\";\nimport { UsersView } from \"@/components/yard/users\";\nimport { EntryLauncher } from \"@/components/yard/entry-launcher\";\n\nconst AnalyticsView = lazy(() => import(\"@/components/yard/analytics\"));\n\ntype View = \"book\" | \"balance\" | \"analyse\" | \"companies\" | \"bills\" | \"stock\" | \"users\" | \"setup\";\n"
+ },
+ {
+  "file": "src/components/yard/app.tsx",
+  "old": "              );\n            })}\n          </nav>\n        </aside>\n        <main className=\"min-w-0 px-4 py-5 pb-28 lg:px-8 lg:pb-16\">\n          {!online ? (\n            <p className=\"mb-4 rounded-xl border border-line bg-sand px-4 py-3 text-sm\" role=\"status\">\n              <span className=\"font-semibold\">No internet.</span> You&apos;re seeing the book as it was last loaded on this device. New changes can&apos;t be saved until you&apos;re back online.\n            </p>\n",
+  "new": "              );\n            })}\n          </nav>\n        </aside>\n        <main className=\"min-w-0 px-4 py-5 pb-44 lg:px-8 lg:pb-28\">\n          {!online ? (\n            <p className=\"mb-4 rounded-xl border border-line bg-sand px-4 py-3 text-sm\" role=\"status\">\n              <span className=\"font-semibold\">No internet.</span> You&apos;re seeing the book as it was last loaded on this device. New changes can&apos;t be saved until you&apos;re back online.\n            </p>\n"
+ },
+ {
+  "file": "src/components/yard/app.tsx",
+  "old": "          {!loading && yard && view === \"setup\" ? <SettingsView yard={yard} entries={entries} payments={payments} onChanged={refresh} /> : null}\n        </main>\n      </div>\n\n      <nav className=\"no-print fixed inset-x-0 bottom-0 z-30 border-t border-line bg-card lg:hidden\" aria-label=\"Sections\">\n        <div className=\"mx-auto flex max-w-lg\">\n          {NAV.map((item) => {\n            const Icon = item.icon;\n",
+  "new": "          {!loading && yard && view === \"setup\" ? <SettingsView yard={yard} entries={entries} payments={payments} onChanged={refresh} /> : null}\n        </main>\n      </div>\n\n      {!loading && yard ? (\n        <EntryLauncher\n          entries={entries}\n          payments={payments}\n          cylinderTypes={yard.cylinderTypes}\n          onChanged={refresh}\n          onShowBook={() => {\n            setFocusCompany(null);\n            setView(\"book\");\n          }}\n        />\n      ) : null}\n\n      <nav className=\"no-print fixed inset-x-0 bottom-0 z-30 border-t border-line bg-card lg:hidden\" aria-label=\"Sections\">\n        <div className=\"mx-auto flex max-w-lg\">\n          {NAV.map((item) => {\n            const Icon = item.icon;\n"
+ }
+]
