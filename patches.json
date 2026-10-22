@@ -60,21 +60,6 @@
   "new": "                aria-current={on ? \"page\" : undefined}\n                className={cn(\n                  \"flex min-h-16 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[0.68rem]\",\n                  on ? \"font-semibold text-rust\" : \"text-muted\",\n                )}\n                onClick={() => {\n                  setFocusCompany(null);\n                  setView(item.id);\n                }}\n              >\n                <Icon className=\"size-5\" aria-hidden />\n"
  },
  {
-  "file": "src/components/yard/book.tsx",
-  "old": "import { useMemo, useState } from \"react\";\nimport { useMutation } from \"@tanstack/react-query\";\nimport { Trash2 } from \"lucide-react\";\nimport {\n  createEntry,\n  deleteEntry,\n  parseEntry,\n  seedSample,\n",
-  "new": "import { useMemo, useState } from \"react\";\nimport { useMutation, useQuery } from \"@tanstack/react-query\";\nimport { Trash2 } from \"lucide-react\";\nimport {\n  createEntry,\n  deleteEntry,\n  listMembers,\n  parseEntry,\n  seedSample,\n"
- },
- {
-  "file": "src/components/yard/book.tsx",
-  "old": "  const [query, setQuery] = useState(\"\");\n  const [pendingDelete, setPendingDelete] = useState<string | null>(null);\n\n  const save = useMutation({\n",
-  "new": "  const [query, setQuery] = useState(\"\");\n  const [pendingDelete, setPendingDelete] = useState<string | null>(null);\n  const membersQuery = useQuery({ queryKey: [\"members\"], queryFn: () => listMembers(), refetchInterval: 30000 });\n  const memberName = useMemo(() => new Map((membersQuery.data ?? []).map((m) => [m.userId, m.name])), [membersQuery.data]);\n\n  const save = useMutation({\n"
- },
- {
-  "file": "src/components/yard/book.tsx",
-  "old": "                    {entry.quantity === 1 ? \"cylinder\" : \"cylinders\"}\n                    {entry.cylinderType ? ` · ${entry.cylinderType}` : \"\"}\n                    {entry.createdBy === userId ? \" · you\" : \" · teammate\"}\n                  </p>\n                </div>\n",
-  "new": "                    {entry.quantity === 1 ? \"cylinder\" : \"cylinders\"}\n                    {entry.cylinderType ? ` · ${entry.cylinderType}` : \"\"}\n                    {entry.createdBy === userId ? \" · by you\" : ` · by ${memberName.get(entry.createdBy) ?? \"a teammate\"}`}\n                  </p>\n                </div>\n"
- },
- {
   "file": "src/components/yard/companies.tsx",
   "old": "  documents,\n  onChanged,\n}: {\n  entries: Entry[];\n  documents: DocRecord[];\n  onChanged: () => void;\n}) {\n  const [query, setQuery] = useState(\"\");\n  const [selected, setSelected] = useState<string | null>(null);\n  const [error, setError] = useState(\"\");\n  const [pendingDelete, setPendingDelete] = useState<string | null>(null);\n",
   "new": "  documents,\n  onChanged,\n  initialCompany,\n}: {\n  entries: Entry[];\n  documents: DocRecord[];\n  onChanged: () => void;\n  initialCompany?: string | null;\n}) {\n  const [query, setQuery] = useState(\"\");\n  const [selected, setSelected] = useState<string | null>(initialCompany ?? null);\n  const [error, setError] = useState(\"\");\n  const [pendingDelete, setPendingDelete] = useState<string | null>(null);\n"
