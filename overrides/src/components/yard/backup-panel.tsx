@@ -83,13 +83,18 @@ async function downloadBackup(onStep?: (text: string) => void): Promise<{ ok: tr
   return { ok: true, backup };
 }
 
-/** Owner-only banner: shows when the last backup is more than a week old, or downloads it by itself if that's switched on. */
+/** True when the owner hasn't backed up this book for a week. */
+export function backupDue(yard: YardInfo) {
+  return !yard.lastBackupAt || Date.now() - new Date(yard.lastBackupAt).getTime() > WEEK_MS;
+}
+
+/** Owner-only note: shows when the last backup is more than a week old, or downloads it by itself if that's switched on. */
 export function BackupReminder({ yard, hasData, onDone }: { yard: YardInfo; hasData: boolean; onDone: () => void }) {
   const [state, setState] = useState<"idle" | "working" | "done" | "error">("idle");
   const [text, setText] = useState("");
   const [hidden, setHidden] = useState(true);
   const ran = useRef(false);
-  const due = !yard.lastBackupAt || Date.now() - new Date(yard.lastBackupAt).getTime() > WEEK_MS;
+  const due = backupDue(yard);
 
   async function run(auto: boolean) {
     setState("working");
@@ -125,7 +130,7 @@ export function BackupReminder({ yard, hasData, onDone }: { yard: YardInfo; hasD
   if (hidden && state === "idle") return null;
   if (state === "done") {
     return (
-      <p className="mb-4 rounded-xl border border-line bg-card px-4 py-3 text-sm text-pine" role="status">
+      <p className="mb-3 rounded-xl border border-line bg-card px-4 py-2.5 text-sm text-pine" role="status">
         {text}{" "}
         <button type="button" className="font-semibold underline" onClick={() => { setState("idle"); setHidden(true); }}>
           Dismiss
@@ -135,29 +140,27 @@ export function BackupReminder({ yard, hasData, onDone }: { yard: YardInfo; hasD
   }
   const days = yard.lastBackupAt ? Math.floor((Date.now() - new Date(yard.lastBackupAt).getTime()) / 86_400_000) : null;
   return (
-    <div className="mb-4 rounded-xl border border-line bg-sand px-4 py-3 text-sm" role="status">
-      <p>
-        <span className="font-semibold">Time for a backup.</span>{" "}
-        {days == null ? "This book has never been backed up." : `The last backup was ${days} days ago (${day(yard.lastBackupAt!)}).`} Keep a copy of everything on this device.
+    <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-line bg-card px-4 py-2.5 text-sm" role="status">
+      <span className="size-2 shrink-0 rounded-full bg-rust" aria-hidden />
+      <p className="min-w-0 flex-1">
+        {days == null ? "No backup yet." : `Last backup ${days} days ago (${day(yard.lastBackupAt!)}).`}
+        {state === "error" ? <span className="block text-rust">{text}</span> : null}
       </p>
-      {state === "error" ? <p className="mt-1 text-rust">{text}</p> : null}
-      <div className="mt-2 flex flex-wrap gap-2">
-        <button type="button" className="btn btn-rust" disabled={state === "working"} onClick={() => void run(false)}>
-          {state === "working" ? text || "Working…" : "Download backup"}
-        </button>
-        <button
-          type="button"
-          className="btn btn-ghost"
-          disabled={state === "working"}
-          onClick={() => {
-            write(snoozeKey(yard.id), String(Date.now() + 24 * 60 * 60 * 1000));
-            setHidden(true);
-            setState("idle");
-          }}
-        >
-          Remind me tomorrow
-        </button>
-      </div>
+      <button type="button" className="font-semibold text-pine underline" disabled={state === "working"} onClick={() => void run(false)}>
+        {state === "working" ? text || "Working…" : "Back up now"}
+      </button>
+      <button
+        type="button"
+        className="text-muted underline"
+        disabled={state === "working"}
+        onClick={() => {
+          write(snoozeKey(yard.id), String(Date.now() + 7 * 24 * 60 * 60 * 1000));
+          setHidden(true);
+          setState("idle");
+        }}
+      >
+        Next week
+      </button>
     </div>
   );
 }
