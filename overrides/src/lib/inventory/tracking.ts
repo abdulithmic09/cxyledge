@@ -39,11 +39,28 @@ export type Deposit = {
 
 export type HoldTerms = { freeDays: number; rate: number };
 
+export type Challan = {
+  id: string;
+  challanNo: string;
+  companyName: string;
+  date: string;
+  vehicle: string;
+  driver: string;
+  receiver: string;
+  signature: string;
+  signedAt: string | null;
+  billedBillNo: string;
+};
+
 export type Tracking = {
   terms: HoldTerms;
   companyTerms: Record<string, Partial<HoldTerms>>;
   moves: StockMove[];
   deposits: Deposit[];
+  /** Days a customer has to pay a bill: book default and per-company overrides. */
+  creditDays: number;
+  companyCredit: Record<string, number>;
+  challans: Challan[];
 };
 
 function cleanInt(value: unknown, min: number, max: number): number | null {
@@ -64,12 +81,16 @@ export const getTracking = createServerFn({ method: "GET" })
   .handler(async ({ context }): Promise<Tracking> => {
     const yard = await ensureYard(context.userId);
     const sql = await sqlClient();
-    const [terms] = await sql<{ hold_free_days: number; hold_rate: number }>`
-      select hold_free_days, hold_rate::float8 as hold_rate from yards where id = ${yard.id}
+    const [terms] = await sql<{ hold_free_days: number; hold_rate: number; credit_days: number }>`
+      select hold_free_days, hold_rate::float8 as hold_rate, credit_days from yards where id = ${yard.id}
     `;
-    const companyRows = await sql<{ company_name: string; hold_free_days: number | null; hold_rate: number | null }>`
-      select company_name, hold_free_days, hold_rate::float8 as hold_rate from company_meta
-      where yard_id = ${yard.id} and (hold_free_days is not null or hold_rate is not null)
+    const companyRows = await sql<{ company_name: string; hold_free_days: number | null; hold_rate: number | null; credit_days: number | null }>`
+      select company_name, hold_free_days, hold_rate::float8 as hold_rate, credit_days from company_meta
+      where yard_id = ${yard.id} and (hold_free_days is not null or hold_rate is not null or credit_days is not null)
+    `;
+    const challans = await sql<{ id: string; challan_no: string; company_name: string; challan_date: string; vehicle: string; driver: string; receiver: string; signature: string; signed_at: string | null; billed_bill_no: string }>`
+      select id, challan_no, company_name, challan_date::text as challan_date, vehicle, driver, receiver, signature, signed_at::text as signed_at, billed_bill_no
+      from challans where yard_id = ${yard.id} and deleted_at is null order by challan_date desc, created_at desc limit 1000
     `;
     const moves = await sql<{ id: string; kind: string; plant: string; gas_type: string; quantity: number; serial_no: string; full_count: number | null; empty_count: number | null; challan_no: string; note: string; moved_on: string; created_at: string }>`
       select id, kind, plant, gas_type, quantity, serial_no, full_count, empty_count, challan_no, note, moved_on::text as moved_on, created_at::text as created_at
@@ -82,7 +103,10 @@ export const getTracking = createServerFn({ method: "GET" })
       order by on_date desc, created_at desc limit 3000
     `;
     const companyTerms: Record<string, Partial<HoldTerms>> = {};
+    const companyCredit: Record<string, number> = {};
     for (const row of companyRows) {
+      if (row.credit_days != null) companyCredit[row.company_name] = Number(row.credit_days);
+      if (row.hold_free_days == null && row.hold_rate == null) continue;
       companyTerms[row.company_name] = {
         ...(row.hold_free_days != null ? { freeDays: Number(row.hold_free_days) } : {}),
         ...(row.hold_rate != null ? { rate: Number(row.hold_rate) } : {}),
@@ -91,6 +115,20 @@ export const getTracking = createServerFn({ method: "GET" })
     return {
       terms: { freeDays: Number(terms?.hold_free_days ?? 30), rate: Number(terms?.hold_rate ?? 0) },
       companyTerms,
+      creditDays: Number(terms?.credit_days ?? 30),
+      companyCredit,
+      challans: challans.map((row) => ({
+        id: row.id,
+        challanNo: row.challan_no,
+        companyName: row.company_name,
+        date: String(row.challan_date).slice(0, 10),
+        vehicle: row.vehicle,
+        driver: row.driver,
+        receiver: row.receiver,
+        signature: row.signature,
+        signedAt: row.signed_at,
+        billedBillNo: row.billed_bill_no,
+      })),
       moves: moves.map((row) => ({
         id: row.id,
         kind: (["to_plant", "from_plant", "count"].includes(row.kind) ? row.kind : "count") as StockMoveKind,
@@ -276,5 +314,53 @@ export const deleteDeposit = createServerFn({ method: "POST" })
     `;
     if (!rows.length) return { ok: false as const, error: "Already removed." };
     await logActivity(yard.id, context.userId, "Removed deposit record", `${rows[0]!.receipt_no} · ${rows[0]!.company_name}`);
+    return { ok: true as const };
+  });
+
+/** Credit days for the whole book (company omitted) or one company (null days clears it). */
+export const saveCreditDays = createServerFn({ method: "POST" })
+  .validator((input: { companyName?: string; days: number | null }) => input)
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const yard = await ensureYard(context.userId);
+    if (!isOwner(yard)) return { ok: false as const, error: NEED_OWNER };
+    const days = data.days == null ? null : cleanInt(data.days, 0, 365);
+    const company = String(data.companyName ?? "").trim().slice(0, 120);
+    const sql = await sqlClient();
+    if (!company) {
+      if (days == null) return { ok: false as const, error: "Enter the number of days (0 to 365)." };
+      await sql`update yards set credit_days = ${days} where id = ${yard.id}`;
+    } else {
+      await sql`
+        insert into company_meta (yard_id, company_name, credit_days) values (${yard.id}, ${company}, ${days})
+        on conflict (yard_id, company_name) do update set credit_days = ${days}, updated_at = now()
+      `;
+    }
+    await logActivity(yard.id, context.userId, "Changed credit days", `${company || "Book"} · ${days == null ? "book default" : `${days} days`}`);
+    return { ok: true as const };
+  });
+
+/** The challan's slip details and signature. The cylinders themselves are booked as entries under the challan number. */
+export const saveChallan = createServerFn({ method: "POST" })
+  .validator((input: { challanNo: string; companyName: string; date: string; vehicle: string; driver: string; receiver: string; signature: string }) => input)
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const yard = await ensureYard(context.userId);
+    if (!canEdit(yard)) return { ok: false as const, error: NEED_EDIT };
+    const challanNo = String(data.challanNo ?? "").trim().slice(0, 40);
+    const company = String(data.companyName ?? "").trim().slice(0, 120);
+    if (!challanNo || !company) return { ok: false as const, error: "Missing challan number or company." };
+    if (!isRealDate(data.date)) return { ok: false as const, error: "Pick a valid date." };
+    const signature = String(data.signature ?? "");
+    if (signature && (!signature.startsWith("data:image/") || signature.length > 120_000)) return { ok: false as const, error: "The signature is too large. Clear it and sign again." };
+    const sql = await sqlClient();
+    await sql`
+      insert into challans (id, yard_id, challan_no, company_name, challan_date, vehicle, driver, receiver, signature, signed_at, created_by)
+      values (${crypto.randomUUID()}, ${yard.id}, ${challanNo}, ${company}, ${data.date}, ${String(data.vehicle ?? "").trim().slice(0, 30)},
+              ${String(data.driver ?? "").trim().slice(0, 60)}, ${String(data.receiver ?? "").trim().slice(0, 60)}, ${signature}, ${signature ? new Date().toISOString() : null}, ${context.userId})
+      on conflict (yard_id, challan_no) do update set company_name = excluded.company_name, challan_date = excluded.challan_date, vehicle = excluded.vehicle,
+        driver = excluded.driver, receiver = excluded.receiver, signature = excluded.signature, signed_at = excluded.signed_at, deleted_at = null
+    `;
+    await logActivity(yard.id, context.userId, "Made delivery challan", `${challanNo} · ${company}${signature ? " · signed" : ""}`);
     return { ok: true as const };
   });
