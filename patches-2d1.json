@@ -1,7 +1,0 @@
-[
- {
-  "file": "src/routes/__root.tsx",
-  "old": "      },\n      { rel: \"stylesheet\", href: appCss },\n      { rel: \"manifest\", href: \"/__grok/manifest.webmanifest\" },\n      { rel: \"apple-touch-icon\", href: \"/__grok/icon-180.png\" },\n    ],\n  }),\n  component: () => (\n",
-  "new": "      },\n      { rel: \"stylesheet\", href: appCss },\n      { rel: \"manifest\", href: \"/__grok/manifest.webmanifest\" },\n      { rel: \"apple-touch-icon\", href: \"/cx-icon-180.png\" },\n    ],\n  }),\n  component: () => (\n"
- }
-]
