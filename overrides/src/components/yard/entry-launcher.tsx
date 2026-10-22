@@ -19,6 +19,9 @@ import {
 } from "@/lib/inventory/api";
 import { makeReceiptPdf, pdfName } from "@/lib/inventory/bill-pdf";
 import { downloadBlob } from "@/lib/inventory/files";
+import { billPrefix, listCancelledBills, nextNumber } from "@/lib/inventory/billing";
+import { addToOutbox, flushOutbox, isOffline, useOutbox } from "@/lib/inventory/outbox";
+import { requestBillEdit } from "@/lib/inventory/nav-requests";
 import { companyBalances, openOrders, type OpenOrder } from "@/lib/inventory/analyse";
 import { undoRecent, type UndoTarget } from "@/lib/inventory/entry-actions";
 import { formatDay } from "@/lib/inventory/model";
@@ -45,6 +48,12 @@ export function takePendingShow(): string | null {
   const id = pendingShow;
   pendingShow = null;
   return id;
+}
+
+/** Ask the Book to scroll to a line and highlight it (call after switching to the Book). */
+export function showInBook(id: string) {
+  pendingShow = id;
+  window.setTimeout(() => window.dispatchEvent(new CustomEvent(SHOW_EVENT, { detail: id })), 60);
 }
 
 export function onShowEntry(handler: (id: string) => void) {
@@ -129,7 +138,7 @@ function fingerprint(draft: EntryDraft) {
 
 /* ---------- the launcher: + button, sheet and the "Saved" note ---------- */
 
-type Toast = { text: string; undo: UndoTarget[]; entryId: string | null; receipt?: Payment; balanceAfter?: number | null };
+type Toast = { text: string; undo: UndoTarget[]; entryId: string | null; receipt?: Payment; balanceAfter?: number | null; billFor?: Entry };
 
 export function EntryLauncher({
   yard,
@@ -138,6 +147,7 @@ export function EntryLauncher({
   cylinderTypes,
   onChanged,
   onShowBook,
+  onOpenBills,
 }: {
   yard: YardInfo;
   entries: Entry[];
@@ -145,12 +155,62 @@ export function EntryLauncher({
   cylinderTypes: string[];
   onChanged: () => void;
   onShowBook: () => void;
+  onOpenBills: () => void;
 }) {
   const { canEdit } = useRole();
   const [sheet, setSheet] = useState<{ key: number; mode: Mode | null; entry: Entry | null; company: string } | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   const [undoNote, setUndoNote] = useState("");
   const [undoing, setUndoing] = useState(false);
+  const [billing, setBilling] = useState(false);
+  const waiting = useOutbox(yard.id);
+
+  // Send anything saved without internet as soon as the phone is back online.
+  useEffect(() => {
+    if (!waiting.length) return;
+    let live = true;
+    const run = () => {
+      void flushOutbox(yard.id).then((result) => {
+        if (!live || (!result.sent && !result.failed.length)) return;
+        onChanged();
+        const parts = [
+          result.sent ? `${result.sent} saved-offline ${result.sent === 1 ? "entry" : "entries"} added to the book.` : "",
+          ...result.failed.map((item) => `Couldn't add "${item.label}": ${item.error} Please enter it again.`),
+        ].filter(Boolean);
+        setUndoNote(parts.join(" "));
+      });
+    };
+    run();
+    window.addEventListener("online", run);
+    const timer = window.setInterval(run, 15000);
+    return () => {
+      live = false;
+      window.removeEventListener("online", run);
+      window.clearInterval(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [waiting.length, yard.id]);
+
+  async function makeBill(entry: Entry) {
+    setBilling(true);
+    try {
+      const cancelled = await listCancelledBills();
+      const billNo = nextNumber([...entries.map((item) => item.billNo), ...cancelled.map((bill) => bill.billNo)], billPrefix(entry.entryDate));
+      const result = await updateEntry({ data: { ...draftFrom(entry), billNo, id: entry.id } });
+      if (!result.ok) {
+        setUndoNote(result.error);
+        return;
+      }
+      setToast(null);
+      requestBillEdit(billNo);
+      onChanged();
+      onOpenBills();
+    } catch {
+      setUndoNote("Couldn't start the bill. Check your internet connection.");
+    } finally {
+      setBilling(false);
+    }
+  }
 
   useEffect(() => {
     const listener = (event: Event) => {
@@ -202,8 +262,18 @@ export function EntryLauncher({
         <div className="no-print fixed inset-x-4 bottom-[9.5rem] z-40 mx-auto max-w-md lg:bottom-28 lg:left-auto lg:right-8" role="status">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-ink px-4 py-3 text-sm text-paper shadow-lg">
             <span className="min-w-0 flex-1">{toast ? toast.text : undoNote}</span>
+            {!toast ? (
+              <button type="button" className="grid size-8 place-items-center rounded-full hover:bg-paper/15" aria-label="Dismiss" onClick={() => setUndoNote("")}>
+                <X className="size-4" aria-hidden />
+              </button>
+            ) : null}
             {toast ? (
               <>
+                {toast.billFor ? (
+                  <button type="button" className="font-semibold underline" disabled={billing} onClick={() => void makeBill(toast.billFor!)}>
+                    {billing ? "Opening…" : "Make bill"}
+                  </button>
+                ) : null}
                 {toast.receipt ? (
                   <button
                     type="button"
@@ -262,6 +332,7 @@ export function EntryLauncher({
           initialMode={sheet.mode}
           editing={sheet.entry}
           initialCompany={sheet.company}
+          yardId={yard.id}
           entries={entries}
           payments={payments}
           cylinderTypes={cylinderTypes}
@@ -287,6 +358,7 @@ function EntrySheet({
   initialMode,
   editing,
   initialCompany,
+  yardId,
   entries,
   payments,
   cylinderTypes,
@@ -296,6 +368,7 @@ function EntrySheet({
   initialMode: Mode | null;
   editing: Entry | null;
   initialCompany: string;
+  yardId: string;
   entries: Entry[];
   payments: Payment[];
   cylinderTypes: string[];
@@ -420,6 +493,29 @@ function EntrySheet({
       setError(orders.length ? "Tick the cylinders that came back." : `No cylinders are out with ${draft.companyName.trim()}.`);
       return;
     }
+    if (isOffline()) {
+      if (editing) {
+        setError("Editing needs internet. Try again when the phone is back online.");
+        return;
+      }
+      const company = draft.companyName.trim();
+      const queued = [
+        ...back.map((row) =>
+          addToOutbox(yardId, {
+            kind: "return",
+            label: `${row.quantity} back from ${company}`,
+            data: { entryId: row.order.entry.id, serials: row.serials, quantity: row.quantity, note: backNote || (mode === "exchange" ? "Exchange" : "") },
+          }),
+        ),
+        ...(giving ? [addToOutbox(yardId, { kind: "entry", label: `${giving.value.quantity} ${mode === "bought" ? "bought from" : "given to"} ${company}`, data: giving.value })] : []),
+      ];
+      if (!queued.every(Boolean)) {
+        setError("Too many entries are waiting on this phone. Connect to the internet first.");
+        return;
+      }
+      onSaved({ text: "No internet: saved on this phone. It goes into the book by itself when you're back online.", undo: [], entryId: null });
+      return;
+    }
     setBusy(true);
     try {
       const undo: UndoTarget[] = [];
@@ -468,7 +564,12 @@ function EntrySheet({
           : mode === "bought"
             ? `${qty} cylinder${qty === 1 ? "" : "s"} bought from ${company} saved.`
             : `${qty} cylinder${qty === 1 ? "" : "s"} given to ${company} saved.`;
-      onSaved({ text, undo: [...undo, { kind: "entry", id: result.entry.id }], entryId: result.entry.id });
+      onSaved({
+        text,
+        undo: [...undo, { kind: "entry", id: result.entry.id }],
+        entryId: result.entry.id,
+        billFor: mode !== "bought" && !result.entry.billNo && result.entry.unitPrice != null ? result.entry : undefined,
+      });
     } catch {
       setError("Could not save. Check your internet connection.");
     } finally {
@@ -480,6 +581,20 @@ function EntrySheet({
     const amount = Number(money.amount.replace(/[^\d.]/g, ""));
     if (!Number.isFinite(amount) || amount <= 0) {
       setError("Enter the amount.");
+      return;
+    }
+    if (isOffline()) {
+      const company = draft.companyName.trim();
+      const ok = addToOutbox(yardId, {
+        kind: "payment",
+        label: `${rupee(amount, 0)} ${money.direction === "in" ? "from" : "to"} ${company}`,
+        data: { companyName: company, direction: money.direction, amount, paidOn: draft.entryDate, mode: money.mode, reference: money.reference, billNo: money.billNo, note: money.note },
+      });
+      if (!ok) {
+        setError("Too many entries are waiting on this phone. Connect to the internet first.");
+        return;
+      }
+      onSaved({ text: "No internet: payment saved on this phone. The receipt number comes once it's sent.", undo: [], entryId: null });
       return;
     }
     setBusy(true);
