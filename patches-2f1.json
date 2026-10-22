@@ -1,0 +1,27 @@
+[
+ {
+  "file": "src/lib/inventory/serials.ts",
+  "old": "    maximumFractionDigits: digits,\n  }).format(value);\n}\n\nexport const DEFAULT_CYLINDER_TYPES = [\n  \"B-Type Oxygen\",\n  \"D-Type Oxygen\",\n  \"B-Type CO2\",\n  \"D-Type CO2\",\n  \"B-Type Nitrous\",\n  \"D-Type Nitrous\",\n  \"B-Type Nitrogen\",\n  \"D-Type Nitrogen\",\n  \"B-Type Argon\",\n  \"D-Type Argon\",\n  \"DA\",\n];\n\n/** Clean a list of type names: trimmed, no blanks, no duplicates (ignoring case), at most 60 of 60 characters. */\nexport function cleanTypeList(values: unknown): string[] {\n",
+  "new": "    maximumFractionDigits: digits,\n  }).format(value);\n}\n\n/** Standard gas types: every gas in A, B and D sizes (kept in step with gases.ts). */\nexport const DEFAULT_CYLINDER_TYPES = [\n  \"A-Type Oxygen\",\n  \"B-Type Oxygen\",\n  \"D-Type Oxygen\",\n  \"A-Type CO2\",\n  \"B-Type CO2\",\n  \"D-Type CO2\",\n  \"A-Type Nitrous\",\n  \"B-Type Nitrous\",\n  \"D-Type Nitrous\",\n  \"A-Type Nitrogen\",\n  \"B-Type Nitrogen\",\n  \"D-Type Nitrogen\",\n  \"A-Type Argon\",\n  \"B-Type Argon\",\n  \"D-Type Argon\",\n  \"A-Type DA\",\n  \"B-Type DA\",\n  \"D-Type DA\",\n];\n\n/** Clean a list of type names: trimmed, no blanks, no duplicates (ignoring case), at most 60 of 60 characters. */\nexport function cleanTypeList(values: unknown): string[] {\n"
+ },
+ {
+  "file": "src/components/yard/backup-panel.tsx",
+  "old": "}\n\nexport function entriesCsvText(entries: import(\"@/lib/inventory/api\").Entry[]) {\n  return toCsv(\n    [\"Date\", \"Company\", \"Movement\", \"Cylinder type\", \"Qty\", \"Serials\", \"Price\", \"Amount\", \"Received with bill\", \"Payment\", \"Bill no.\", \"Note\"],\n    entries.map((entry) => [\n      entry.entryDate.split(\"-\").reverse().join(\"/\"),\n      entry.companyName,\n      movementLabel(entry.movement),\n",
+  "new": "}\n\nexport function entriesCsvText(entries: import(\"@/lib/inventory/api\").Entry[]) {\n  return toCsv(\n    [\"Date\", \"Company\", \"Movement\", \"Gas type\", \"Qty\", \"Serials\", \"Price\", \"Amount\", \"Received with bill\", \"Payment\", \"Bill no.\", \"Note\"],\n    entries.map((entry) => [\n      entry.entryDate.split(\"-\").reverse().join(\"/\"),\n      entry.companyName,\n      movementLabel(entry.movement),\n"
+ },
+ {
+  "file": "src/components/yard/companies.tsx",
+  "old": "        ),\n      ]\n    : [];\n  const csv = toCsv(\n    [\"Date\", \"Movement\", \"Cylinder type\", \"Qty\", \"Serials\", \"Bill\", \"Payment\", \"Due\", \"Paid\"],\n    companyEntries.map((entry) => [\n      entry.entryDate,\n      movementLabel(entry.movement),\n      entry.cylinderType,\n",
+  "new": "        ),\n      ]\n    : [];\n  const csv = toCsv(\n    [\"Date\", \"Movement\", \"Gas type\", \"Qty\", \"Serials\", \"Bill\", \"Payment\", \"Due\", \"Paid\"],\n    companyEntries.map((entry) => [\n      entry.entryDate,\n      movementLabel(entry.movement),\n      entry.cylinderType,\n"
+ },
+ {
+  "file": "src/components/yard/companies.tsx",
+  "old": "                  <div className=\"mt-3 overflow-hidden rounded-lg border border-line\">\n                    <table className=\"w-full text-sm\">\n                      <thead className=\"bg-sand text-left text-xs text-muted\">\n                        <tr>\n                          <th className=\"px-3 py-2 font-semibold\">Cylinder type</th>\n                          <th className=\"px-3 py-2 text-right font-semibold\">At customer</th>\n                        </tr>\n                      </thead>\n                      <tbody>\n",
+  "new": "                  <div className=\"mt-3 overflow-hidden rounded-lg border border-line\">\n                    <table className=\"w-full text-sm\">\n                      <thead className=\"bg-sand text-left text-xs text-muted\">\n                        <tr>\n                          <th className=\"px-3 py-2 font-semibold\">Gas type</th>\n                          <th className=\"px-3 py-2 text-right font-semibold\">At customer</th>\n                        </tr>\n                      </thead>\n                      <tbody>\n"
+ },
+ {
+  "file": "src/components/yard/balances.tsx",
+  "old": "      <input\n        className=\"field\"\n        value={query}\n        onChange={(event) => setQuery(event.target.value)}\n        placeholder=\"Find a company, serial no. or cylinder type\"\n        aria-label=\"Find in balances\"\n      />\n      {open.length === 0 ? (\n        <Panel title=\"All clear\">\n",
+  "new": "      <input\n        className=\"field\"\n        value={query}\n        onChange={(event) => setQuery(event.target.value)}\n        placeholder=\"Find a company, serial no. or gas type\"\n        aria-label=\"Find in balances\"\n      />\n      {open.length === 0 ? (\n        <Panel title=\"All clear\">\n"
+ }
+]
