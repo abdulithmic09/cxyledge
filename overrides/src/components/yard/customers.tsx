@@ -17,6 +17,7 @@ import { DepositsPanel } from "@/components/yard/deposits-panel";
 import { OverduePanel } from "@/components/yard/overdue-panel";
 import { groupBills } from "@/components/yard/bill-views";
 import { openEntrySheet } from "@/components/yard/entry-launcher";
+import { requestBillEdit } from "@/lib/inventory/nav-requests";
 import { ExportBar } from "@/components/yard/export-bar";
 import { Field, Panel, Stat } from "@/components/yard/ui";
 
@@ -457,6 +458,7 @@ function LedgerTab({ company, entries, payments, balance }: { company: string; e
 }
 
 function BillsTab({ company, entries, documents, onOpenBills }: { company: string; entries: Entry[]; documents: DocRecord[]; onOpenBills: () => void }) {
+  const { canEdit } = useRole();
   const bills = useMemo(() => groupBills(entries.filter((entry) => entry.companyName === company)), [entries, company]);
   const pdfFor = (billNo: string) => documents.find((doc) => doc.title.startsWith(billNo) && doc.content.startsWith("data:"));
   return (
@@ -495,6 +497,18 @@ function BillsTab({ company, entries, documents, onOpenBills }: { company: strin
                       PDF
                     </button>
                   ) : null}
+                  {canEdit ? (
+                    <button
+                      type="button"
+                      className={cn("btn h-9 px-3 text-sm", challan ? "btn-pine" : "btn-ghost")}
+                      onClick={() => {
+                        requestBillEdit(bill.billNo);
+                        onOpenBills();
+                      }}
+                    >
+                      {challan ? "Make bill" : "Edit"}
+                    </button>
+                  ) : null}
                 </div>
               </li>
             );
@@ -502,7 +516,7 @@ function BillsTab({ company, entries, documents, onOpenBills }: { company: strin
         </ul>
       )}
       <button type="button" className="btn btn-ghost mt-3" onClick={onOpenBills}>
-        Make a bill or edit one in Bills
+        Make a new bill
       </button>
     </Panel>
   );
