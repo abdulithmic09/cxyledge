@@ -4,7 +4,7 @@ import { Boxes, Building2, ChevronRight, Cylinder, LayoutList, MoreHorizontal, P
 import { SignInPanel } from "@/components/yard/sign-in-panel";
 import { UserButton } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { getYard, joinYard, listDocuments, listEntries, listPayments, listReturns, normalizeRole, peekInvite, ROLE_LABEL } from "@/lib/inventory/api";
+import { getYard, joinYard, listDocuments, listPayments, listReturns, normalizeRole, peekInvite, ROLE_LABEL } from "@/lib/inventory/api";
 import { RoleContext } from "@/lib/inventory/role";
 import { BackupReminder, backupDue } from "@/components/yard/backup-panel";
 import { registerOffline, useOnline } from "@/lib/inventory/offline";
@@ -17,7 +17,10 @@ import { BillsView } from "@/components/yard/bills";
 import { StockView } from "@/components/yard/stock-view";
 import { SettingsHome } from "@/components/yard/settings-home";
 import { UsersView } from "@/components/yard/users";
-import { EntryLauncher } from "@/components/yard/entry-launcher";
+import { EntryLauncher, showInBook } from "@/components/yard/entry-launcher";
+import { GlobalSearch } from "@/components/yard/global-search";
+import { useBookEntries } from "@/lib/inventory/book-sync";
+import { requestBillEdit, requestCylinder } from "@/lib/inventory/nav-requests";
 
 const AnalyticsView = lazy(() => import("@/components/yard/analytics"));
 
@@ -124,6 +127,8 @@ function SignedOut() {
 function Shell({ userId }: { userId: string }) {
   const [view, setView] = useState<View>("book");
   const [focusCompany, setFocusCompany] = useState<string | null>(null);
+  // Bumped when another screen hands something over, so Bills and Stock open fresh with it.
+  const [visit, setVisit] = useState(0);
   const [joinNote, setJoinNote] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
   // Hold the book load until an invite is used, so a new teammate doesn't get an empty book of their own first.
   const [joining, setJoining] = useState(() => Boolean(pendingInvite()));
@@ -171,13 +176,7 @@ function Shell({ userId }: { userId: string }) {
     refetchInterval: 8000,
     refetchOnWindowFocus: true,
   });
-  const entryQuery = useQuery({
-    queryKey: ["entries", userId, yardQuery.data?.id],
-    queryFn: () => listEntries(),
-    enabled: Boolean(yardQuery.data?.id),
-    refetchInterval: 5000,
-    refetchOnWindowFocus: true,
-  });
+  const entryQuery = useBookEntries(userId, yardQuery.data?.id);
   const returnQuery = useQuery({
     queryKey: ["returns", userId, yardQuery.data?.id],
     queryFn: () => listReturns(),
@@ -188,7 +187,8 @@ function Shell({ userId }: { userId: string }) {
     queryKey: ["docs", userId, yardQuery.data?.id],
     queryFn: () => listDocuments(),
     enabled: Boolean(yardQuery.data?.id),
-    refetchInterval: 8000,
+    // Files are large; refresh them now and then, and whenever something is saved.
+    refetchInterval: 60000,
   });
   const paymentQuery = useQuery({
     queryKey: ["payments", userId, yardQuery.data?.id],
@@ -234,7 +234,32 @@ function Shell({ userId }: { userId: string }) {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <p className="hidden text-right text-xs text-muted sm:block">
+            {yard ? (
+              <GlobalSearch
+                entries={entries}
+                payments={payments}
+                onOpenCompany={(company) => {
+                  setFocusCompany(company);
+                  setView("customers");
+                }}
+                onOpenEntry={(id) => {
+                  setFocusCompany(null);
+                  setView("book");
+                  showInBook(id);
+                }}
+                onOpenBill={(billNo) => {
+                  requestBillEdit(billNo);
+                  setVisit((value) => value + 1);
+                  setView("bills");
+                }}
+                onFindCylinder={(serial) => {
+                  requestCylinder(serial);
+                  setVisit((value) => value + 1);
+                  setView("stock");
+                }}
+              />
+            ) : null}
+            <p className="hidden text-right text-xs text-muted lg:block">
               Cloud book
               <span className="block">Updates on every signed-in device</span>
             </p>
@@ -306,7 +331,7 @@ function Shell({ userId }: { userId: string }) {
           ) : null}
           {loading ? <p className="text-sm text-muted">Loading the shared book…</p> : null}
           {!loading && yard && view === "book" ? (
-            <BookView entries={entries} payments={payments} cylinderTypes={yard.cylinderTypes} userId={userId} logs={returnQuery.data ?? []} onChanged={refresh} syncedAt={entryQuery.dataUpdatedAt} />
+            <BookView entries={entries} payments={payments} cylinderTypes={yard.cylinderTypes} userId={userId} yardId={yard.id} logs={returnQuery.data ?? []} onChanged={refresh} syncedAt={entryQuery.dataUpdatedAt} />
           ) : null}
           {!loading && yard && view === "customers" ? (
             <CustomersView
@@ -319,6 +344,7 @@ function Shell({ userId }: { userId: string }) {
               initialCompany={focusCompany}
               onOpenBills={() => {
                 setFocusCompany(null);
+                setVisit((value) => value + 1);
                 setView("bills");
               }}
             />
@@ -328,8 +354,8 @@ function Shell({ userId }: { userId: string }) {
               <AnalyticsView entries={entries} payments={payments} yardName={yard?.name ?? "Cxyledge"} />
             </Suspense>
           ) : null}
-          {!loading && yard && view === "bills" ? <BillsView yard={yard} entries={entries} onChanged={refresh} /> : null}
-          {!loading && yard && view === "stock" ? <StockView yard={yard} entries={entries} payments={payments} onChanged={refresh} /> : null}
+          {!loading && yard && view === "bills" ? <BillsView key={`bills-${visit}`} yard={yard} entries={entries} onChanged={refresh} /> : null}
+          {!loading && yard && view === "stock" ? <StockView key={`stock-${visit}`} yard={yard} entries={entries} payments={payments} onChanged={refresh} /> : null}
           {!loading && yard && view === "users" ? <UsersView yardName={yard.name} /> : null}
           {!loading && yard && view === "setup" ? <SettingsHome yard={yard} entries={entries} payments={payments} onChanged={refresh} /> : null}
           {!loading && yard && view === "more" ? (
@@ -373,6 +399,11 @@ function Shell({ userId }: { userId: string }) {
           onShowBook={() => {
             setFocusCompany(null);
             setView("book");
+          }}
+          onOpenBills={() => {
+            setFocusCompany(null);
+            setVisit((value) => value + 1);
+            setView("bills");
           }}
         />
       ) : null}
