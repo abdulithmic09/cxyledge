@@ -77,7 +77,7 @@ export function PaymentsPanel({
   const [confirm, setConfirm] = useState<string | null>(null);
   const [undo, setUndo] = useState<Payment | null>(null);
 
-  const mine = useMemo(() => payments.filter((payment) => payment.companyName === company), [payments, company]);
+  const mine = useMemo(() => payments.filter((payment) => payment.companyName === company && payment.direction !== "charge"), [payments, company]);
   const bills = useMemo(
     () => [...new Set(entries.filter((entry) => entry.companyName === company && entry.billNo).map((entry) => entry.billNo))].sort().reverse(),
     [entries, company],
@@ -268,7 +268,7 @@ function ReceiptCard({ yard, payment, balanceAfter }: { yard: YardInfo; payment:
   const received = payment.direction === "in";
   const data: ReceiptData = {
     yard,
-    direction: payment.direction,
+    direction: payment.direction === "out" ? "out" : "in",
     receiptNo: payment.receiptNo,
     date: payment.paidOn,
     company: payment.companyName,
