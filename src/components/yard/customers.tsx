@@ -147,13 +147,13 @@ export function CustomersView({
         }
       />
       {showShare ? (
-        <div className="rounded-lg border border-line bg-card p-3">
+        <div className="card p-3">
           <ExportBar title="Cxyledge balance summary" filename="cxyledge-balance" lines={lines} csv={csv} />
         </div>
       ) : null}
       <Tally
         items={[
-          { label: "Cylinders out", value: stillOut },
+          { label: "Out", value: stillOut },
           { label: "To collect", value: rupee(toCollect, 0), tone: toCollect > 0 ? "rust" : undefined },
           { label: "Late", value: late.size ? rupee(lateTotal, 0) : "None", tone: late.size ? "rust" : undefined },
         ]}
@@ -161,7 +161,7 @@ export function CustomersView({
 
       <button
         type="button"
-        className="flex items-center gap-2.5 rounded-lg border border-line bg-card px-3.5 py-2.5 text-left text-sm hover:bg-sand"
+        className="flex items-center gap-2.5 card px-3.5 py-2.5 text-left text-sm hover:bg-sand"
         aria-expanded={showReminders}
         onClick={() => setShowReminders((value) => !value)}
       >
@@ -182,7 +182,7 @@ export function CustomersView({
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
         <div className="relative min-w-0 flex-1 lg:max-w-sm">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" aria-hidden />
-          <input className="field pl-9" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name, phone, serial or bill no." aria-label="Search customers" />
+          <input className="field border-transparent pl-9 shadow-card" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name, phone, serial or bill no." aria-label="Search customers" />
         </div>
         <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
           <div className="seg" role="group" aria-label="Show">
@@ -208,8 +208,8 @@ export function CustomersView({
           {balances.length === 0 ? "No customers yet. They appear once you give cylinders or make a bill." : "No match. Try a serial number, a bill number or part of the name."}
         </div>
       ) : (
-        <div className="-mx-4 border-y border-line bg-card sm:mx-0 sm:rounded-lg sm:border">
-          <div className="label grid grid-cols-[minmax(0,1fr)_4.5rem_6.5rem_1rem] gap-3 border-b border-line px-4 py-2">
+        <div className="card overflow-hidden">
+          <div className="label grid grid-cols-[minmax(0,1fr)_4rem_6.5rem_1rem] gap-3 border-b border-line bg-sand/50 px-4 py-2.5">
             <span>Company</span>
             <span className="text-right">Out</span>
             <span className="text-right">To collect</span>
@@ -220,18 +220,18 @@ export function CustomersView({
               const overdue = late.get(row.company) ?? 0;
               return (
                 <li key={row.company} className="border-b border-line last:border-b-0">
-                  <button type="button" className="grid w-full grid-cols-[minmax(0,1fr)_4.5rem_6.5rem_1rem] items-center gap-3 px-4 py-2.5 text-left hover:bg-sand/60" onClick={() => setSelected(row.company)}>
+                  <button type="button" className="grid w-full grid-cols-[minmax(0,1fr)_4rem_6.5rem_1rem] items-center gap-3 px-4 py-3 text-left hover:bg-sand/60" onClick={() => setSelected(row.company)}>
                     <span className="min-w-0">
                       <span className="flex items-center gap-2">
-                        <span className="truncate font-medium">{row.company}</span>
-                        {overdue ? <span className="shrink-0 rounded bg-rust/10 px-1.5 py-px text-[0.68rem] font-semibold uppercase tracking-wide text-rust">Late</span> : null}
+                        <span className="truncate font-bold">{row.company}</span>
+                        {overdue ? <span className="tag tag-due shrink-0">Late</span> : null}
                       </span>
                       <span className="block truncate text-xs text-muted">
                         {row.byType.length ? row.byType.map((t) => `${t.out} ${t.type}`).join(" · ") : "No cylinders out"}
                       </span>
                     </span>
-                    <span className={cn("text-right font-semibold tabular-nums", !row.outstandingQty && "font-normal text-muted")}>{row.outstandingQty}</span>
-                    <span className={cn("text-right tabular-nums", row.toCollect ? "font-semibold text-rust" : "text-muted")}>{row.toCollect ? rupee(row.toCollect, 0) : "—"}</span>
+                    <span className={cn("text-right font-bold tabular-nums", !row.outstandingQty && "font-normal text-muted")}>{row.outstandingQty}</span>
+                    <span className={cn("text-right tabular-nums", row.toCollect ? "font-bold text-rust" : "text-muted")}>{row.toCollect ? rupee(row.toCollect, 0) : "—"}</span>
                     <ChevronRight className="size-4 text-muted" aria-hidden />
                   </button>
                 </li>
@@ -297,57 +297,60 @@ function CompanyPage({
 
   return (
     <div className="flex flex-col gap-4">
-      <button type="button" className="-ml-2 -mb-1 flex w-fit items-center gap-1 rounded-md px-2 py-1 text-sm text-muted hover:bg-sand hover:text-ink" onClick={onBack}>
-        <ChevronLeft className="size-4" aria-hidden /> Customers
-      </button>
-
-      <div className="flex flex-col gap-3">
+      <section className="navy -mx-4 -mt-4 flex flex-col gap-3 px-5 pb-5 pt-3 lg:mx-0 lg:mt-0 lg:rounded-2xl lg:px-7 lg:pt-5">
+        <button type="button" className="-ml-2 flex w-fit items-center gap-1 rounded-lg px-2 py-1 text-sm text-white/70 hover:bg-white/10 hover:text-white" onClick={onBack}>
+          <ChevronLeft className="size-4" aria-hidden /> Customers
+        </button>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <h2 className="min-w-0 text-xl font-semibold leading-tight sm:text-2xl">{company}</h2>
-          {lateAmount ? <span className="rounded bg-rust/10 px-1.5 py-0.5 text-xs font-semibold text-rust">{rupee(lateAmount, 0)} late</span> : null}
+          <h2 className="min-w-0 text-2xl font-extrabold leading-tight">{company}</h2>
+          {lateAmount ? <span className="rounded-md bg-[#ffd9d4] px-2 py-0.5 text-xs font-bold text-[#9c2219]">{rupee(lateAmount, 0)} late</span> : null}
         </div>
-        <Tally
-          items={[
-            { label: "Cylinders out", value: balance.outstandingQty },
-            { label: "To collect", value: rupee(balance.toCollect, 0), tone: balance.toCollect > 0 ? "rust" : undefined },
-          ]}
-        />
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <p className="text-xs text-white/65">To collect</p>
+            <p className="text-[1.75rem] font-extrabold leading-tight tabular-nums">{rupee(balance.toCollect, 0)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-white/65">Cylinders out</p>
+            <p className="text-[1.75rem] font-extrabold leading-tight tabular-nums">{balance.outstandingQty}</p>
+          </div>
+        </div>
         {balance.byType.length || balance.outstandingSerials.length ? (
-          <div className="text-sm">
+          <div className="text-sm text-white/80">
             {balance.byType.length ? <p>{balance.byType.map((t) => `${t.out} × ${t.type}`).join(" · ")}</p> : null}
             {balance.outstandingSerials.length ? (
-              <p className="code mt-0.5 text-xs text-muted">
+              <p className="code mt-0.5 text-xs text-white/60">
                 {balance.outstandingSerials.slice(0, 16).join(", ")}
                 {balance.outstandingSerials.length > 16 ? ` +${balance.outstandingSerials.length - 16} more` : ""}
               </p>
             ) : null}
           </div>
         ) : null}
-        <div className="flex flex-wrap gap-2 [&>*]:h-9 [&>*]:min-h-0 [&>*]:px-3 [&>*]:text-sm">
+        <div className="flex flex-wrap gap-2 [&>*]:h-10 [&>*]:min-h-0 [&>*]:px-3.5 [&>*]:text-sm">
           {canEdit ? (
             <>
-              <button type="button" className="btn btn-rust gap-1.5" onClick={() => openEntrySheet({ mode: "money", company })}>
+              <button type="button" className="btn btn-gold gap-1.5 !shadow-none" onClick={() => openEntrySheet({ mode: "money", company })}>
                 <IndianRupee className="size-4" aria-hidden /> Money received
               </button>
-              <button type="button" className="btn btn-ghost gap-1.5" onClick={() => openEntrySheet({ mode: "give", company })}>
+              <button type="button" className="btn gap-1.5 bg-white/12 text-white ring-1 ring-white/15 hover:bg-white/20" onClick={() => openEntrySheet({ mode: "give", company })}>
                 <ArrowUpRight className="size-4" aria-hidden /> Give cylinders
               </button>
             </>
           ) : null}
-          <a className="btn btn-ghost gap-1.5" href={whatsappLink(phone, balanceMessage({ yardName: yard.name, balance }))} target="_blank" rel="noopener noreferrer">
+          <a className="btn gap-1.5 bg-white/12 text-white ring-1 ring-white/15 hover:bg-white/20" href={whatsappLink(phone, balanceMessage({ yardName: yard.name, balance }))} target="_blank" rel="noopener noreferrer">
             <MessageCircle className="size-4" aria-hidden /> WhatsApp
           </a>
           {digits ? (
-            <a className="btn btn-ghost gap-1.5" href={`tel:+${digits}`}>
+            <a className="btn gap-1.5 bg-white/12 text-white ring-1 ring-white/15 hover:bg-white/20" href={`tel:+${digits}`}>
               <Phone className="size-4" aria-hidden /> Call
             </a>
           ) : (
-            <button type="button" className="btn btn-ghost gap-1.5 text-muted" onClick={() => setTab("details")}>
+            <button type="button" className="btn gap-1.5 bg-white/12 text-white/80 ring-1 ring-white/15 hover:bg-white/20" onClick={() => setTab("details")}>
               <Phone className="size-4" aria-hidden /> Add number
             </button>
           )}
         </div>
-      </div>
+      </section>
 
       <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0" role="tablist" aria-label={`${company} sections`}>
         <div className="tabs">

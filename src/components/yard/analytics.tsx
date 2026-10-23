@@ -139,7 +139,7 @@ export default function AnalyticsView({ entries, payments = [], yardName }: { en
         </div>
       ) : null}
       {showFilters ? (
-        <div className="grid gap-2 rounded-xl border border-line bg-card p-3 sm:grid-cols-[1fr_1fr_auto]">
+        <div className="grid gap-2 card p-3 sm:grid-cols-[1fr_1fr_auto]">
           <select className="field" aria-label="Company" value={company} onChange={(event) => setCompany(event.target.value)}>
             <option value="all">All companies</option>
             {companies.map((name) => (
@@ -168,7 +168,7 @@ export default function AnalyticsView({ entries, payments = [], yardName }: { en
         </div>
       ) : null}
       {showExport ? (
-        <div className="rounded-xl border border-line bg-card p-3">
+        <div className="card p-3">
           <ExportBar title={`${yardName} analytics`} filename="cxyledge-analytics" lines={lines} csv={csv} />
         </div>
       ) : null}
@@ -299,7 +299,7 @@ function ChartTip({
 }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-lg border border-line bg-card px-3 py-2 text-sm">
+    <div className="card px-3 py-2 text-sm">
       <p className="font-medium">{label}</p>
       {payload.map((item) => (
         <p key={String(item.dataKey)} className="tabular-nums text-muted">

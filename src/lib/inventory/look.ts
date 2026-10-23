@@ -93,11 +93,11 @@ export function applyLook(look: Look) {
   }
   if (text) {
     root.style.setProperty("--color-ink", text);
-    root.style.setProperty("--color-muted", `color-mix(in srgb, ${text} 70%, ${background || (dark ? "#0e1114" : "#f2f3f5")} 30%)`);
+    root.style.setProperty("--color-muted", `color-mix(in srgb, ${text} 70%, ${background || (dark ? "#0a1120" : "#f4f6fa")} 30%)`);
   }
   if (accent) {
     root.style.setProperty("--color-brand", accent);
     root.style.setProperty("--color-brand-fg", readableOn(accent));
-    root.style.setProperty("--color-brand-soft", `color-mix(in srgb, ${accent} 12%, ${background || (dark ? "#161a1f" : "#ffffff")})`);
+    root.style.setProperty("--color-brand-soft", `color-mix(in srgb, ${accent} 12%, ${background || (dark ? "#121b2d" : "#ffffff")})`);
   }
 }

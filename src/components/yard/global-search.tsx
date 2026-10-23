@@ -38,13 +38,13 @@ export function GlobalSearch(props: Props) {
     <>
       <button
         type="button"
-        className="flex size-10 items-center justify-center gap-2 rounded-md text-muted hover:bg-sand hover:text-ink lg:h-9 lg:w-72 lg:justify-start lg:border lg:border-line lg:bg-paper lg:px-3 lg:text-sm"
+        className="flex size-10 items-center justify-center gap-2 rounded-xl text-white/85 hover:bg-white/10 hover:text-white lg:h-10 lg:w-80 lg:justify-start lg:bg-white/10 lg:px-3.5 lg:text-sm lg:text-white/65 lg:ring-1 lg:ring-white/10"
         aria-label="Search the whole book"
         onClick={() => setOpen(true)}
       >
         <Search className="size-[1.1rem] shrink-0" aria-hidden />
         <span className="hidden flex-1 text-left lg:block">Search customers, serials, bills</span>
-        <kbd className="hidden rounded border border-line bg-card px-1.5 text-[0.7rem] font-medium lg:block">/</kbd>
+        <kbd className="code hidden rounded-md bg-white/10 px-1.5 text-[0.7rem] text-white/70 lg:block">/</kbd>
       </button>
       {open ? createPortal(<SearchSheet {...props} onClose={() => setOpen(false)} />, document.body) : null}
     </>

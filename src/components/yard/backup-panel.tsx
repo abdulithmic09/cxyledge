@@ -131,7 +131,7 @@ export function BackupReminder({ yard, hasData, onDone }: { yard: YardInfo; hasD
   if (hidden && state === "idle") return null;
   if (state === "done") {
     return (
-      <p className="mb-3 rounded-lg border border-line bg-card px-3.5 py-2 text-sm text-pine" role="status">
+      <p className="mb-3 card px-3.5 py-2 text-sm text-pine" role="status">
         {text}{" "}
         <button type="button" className="font-semibold text-brand" onClick={() => { setState("idle"); setHidden(true); }}>
           Dismiss
@@ -141,7 +141,7 @@ export function BackupReminder({ yard, hasData, onDone }: { yard: YardInfo; hasD
   }
   const days = yard.lastBackupAt ? Math.floor((Date.now() - new Date(yard.lastBackupAt).getTime()) / 86_400_000) : null;
   return (
-    <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-line bg-card px-3.5 py-2 text-sm" role="status">
+    <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 card px-3.5 py-2 text-sm" role="status">
       <ShieldAlert className="size-4 shrink-0 text-muted" aria-hidden />
       <p className="min-w-0 flex-1">
         {days == null ? "No backup yet." : `Last backup ${days} days ago (${day(yard.lastBackupAt!)}).`}

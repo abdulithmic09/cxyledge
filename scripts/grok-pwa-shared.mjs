@@ -168,8 +168,8 @@ export function renderWebManifest(hostHeader) {
       scope: "/",
       display: "standalone",
       description: "Cylinder book, balances, bills and payments for your gas yard.",
-      background_color: "#f2f3f5",
-      theme_color: "#ffffff",
+      background_color: "#f4f6fa",
+      theme_color: "#0f2747",
       icons: [
         { src: "/cx-icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
         { src: "/cx-icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
@@ -195,7 +195,7 @@ export function grokPwaHeadTags(appName = DEFAULT_APP_NAME) {
       "apple-mobile-web-app-status-bar-style",
       '<meta name="apple-mobile-web-app-status-bar-style" content="black">',
     ],
-    ["theme-color", '<meta name="theme-color" content="#ffffff">'],
+    ["theme-color", '<meta name="theme-color" content="#0f2747">'],
   ];
 }
 

@@ -171,8 +171,8 @@ export function SettingsHome({ yard, entries, payments, onChanged }: { yard: Yar
                   <div className="seg" role="group" aria-label="Colour">
                     {(["rust", "pine"] as LookAccent[]).map((accent) => (
                       <button key={accent} type="button" aria-pressed={look.accent === accent} onClick={() => updateLook({ accent })}>
-                        <span className={cn("mr-1.5 inline-block size-2.5 rounded-full align-middle", accent === "rust" ? "bg-[#1f4a8c]" : "bg-[#1d5c45]")} aria-hidden />
-                        {accent === "rust" ? "Blue" : "Green"}
+                        <span className={cn("mr-1.5 inline-block size-2.5 rounded-full align-middle", accent === "rust" ? "bg-[#0f2747]" : "bg-[#1d5c45]")} aria-hidden />
+                        {accent === "rust" ? "Navy" : "Green"}
                       </button>
                     ))}
                   </div>
@@ -181,9 +181,9 @@ export function SettingsHome({ yard, entries, payments, onChanged }: { yard: Yar
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
                 {(
                   [
-                    ["background", "Background colour", "#f2f3f5"],
-                    ["text", "Text colour", "#16191d"],
-                    ["accent", "Accent colour", "#1f4a8c"],
+                    ["background", "Background colour", "#f4f6fa"],
+                    ["text", "Text colour", "#0f1b2d"],
+                    ["accent", "Accent colour", "#0f2747"],
                   ] as Array<[keyof LookColors, string, string]>
                 ).map(([key, label, fallback]) => (
                   <label key={key} className="flex items-center justify-between gap-3 rounded-lg border border-line px-3 py-2 text-sm">
@@ -226,18 +226,20 @@ export function SettingsHome({ yard, entries, payments, onChanged }: { yard: Yar
   return (
     <div className="flex flex-col gap-3">
       <PageHead title="Settings" detail={yard.name} />
-      <ul className="-mx-4 overflow-hidden border-y border-line bg-card sm:mx-0 sm:rounded-lg sm:border">
+      <ul className="card overflow-hidden">
         {SECTIONS.map((item) => {
           const Icon = item.icon;
           const dot = item.id === "backup" && due;
           return (
             <li key={item.id} className="border-b border-line last:border-b-0">
               <button type="button" className="flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-sand" onClick={() => setSection(item.id)}>
-                <Icon className="size-5 shrink-0 text-muted" aria-hidden />
+                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-soft text-brand">
+                  <Icon className="size-5" aria-hidden />
+                </span>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-2 font-semibold">
                     {item.title}
-                    {dot ? <span className="rounded bg-rust/10 px-1.5 py-0.5 text-[0.7rem] font-semibold text-rust">Backup due</span> : null}
+                    {dot ? <span className="tag tag-due">Backup due</span> : null}
                   </span>
                   <span className="block text-xs text-muted">{item.hint}</span>
                 </span>

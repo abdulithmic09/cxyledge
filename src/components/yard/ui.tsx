@@ -12,11 +12,11 @@ export function Stat({
   tone?: "pine" | "rust";
 }) {
   return (
-    <div className="rounded-lg border border-line bg-card px-3.5 py-2.5">
+    <div className="card px-4 py-3">
       <p className="label">{label}</p>
       <p
         className={cn(
-          "mt-0.5 text-xl font-semibold tabular-nums",
+          "mt-0.5 text-xl font-bold tabular-nums",
           tone === "pine" && "text-pine",
           tone === "rust" && "text-rust",
         )}
@@ -32,11 +32,11 @@ const COLS: Record<number, string> = { 1: "grid-cols-1", 2: "grid-cols-2", 3: "g
 /** Figures in one ruled row, edge to edge on a phone. */
 export function Tally({ items, className }: { items: Array<{ label: string; value: ReactNode; tone?: "pine" | "rust" }>; className?: string }) {
   return (
-    <div className={cn("tally -mx-4 sm:mx-0 sm:rounded-lg sm:border", COLS[items.length] ?? "grid-cols-2", className)}>
+    <div className={cn("tally", COLS[items.length] ?? "grid-cols-2", className)}>
       {items.map((item) => (
         <div key={item.label}>
           <p className="label truncate">{item.label}</p>
-          <p className={cn("mt-0.5 truncate text-lg font-semibold tabular-nums", item.tone === "pine" && "text-pine", item.tone === "rust" && "text-rust")}>{item.value}</p>
+          <p className={cn("mt-0.5 truncate text-lg font-bold tabular-nums", item.tone === "pine" && "text-pine", item.tone === "rust" && "text-rust")}>{item.value}</p>
         </div>
       ))}
     </div>
@@ -48,7 +48,7 @@ export function PageHead({ title, detail, action }: { title: string; detail?: Re
   return (
     <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-2">
       <div className="min-w-0">
-        <h2 className="text-xl font-semibold leading-tight sm:text-2xl">{title}</h2>
+        <h2 className="text-[1.375rem] font-bold leading-tight sm:text-2xl">{title}</h2>
         {detail ? <p className="mt-0.5 text-sm text-muted">{detail}</p> : null}
       </div>
       {action ? <div className="flex shrink-0 gap-2">{action}</div> : null}
@@ -86,10 +86,10 @@ export function Panel({
   className?: string;
 }) {
   return (
-    <section className={cn("rounded-lg border border-line bg-card p-4", className)}>
+    <section className={cn("card p-4 sm:p-5", className)}>
       {title ? (
-        <div className="mb-3 flex items-center justify-between gap-3 border-b border-line pb-2.5">
-          <h2 className="text-base font-semibold leading-tight">{title}</h2>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="text-base font-bold leading-tight">{title}</h2>
           {action}
         </div>
       ) : null}
@@ -100,8 +100,8 @@ export function Panel({
 
 export function EmptyNote({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="rounded-lg border border-dashed border-line bg-card px-5 py-8 text-center">
-      <h2 className="text-base font-semibold">{title}</h2>
+    <div className="card px-5 py-8 text-center">
+      <h2 className="text-base font-bold">{title}</h2>
       <div className="mx-auto mt-1.5 max-w-md text-sm text-muted">{children}</div>
     </div>
   );

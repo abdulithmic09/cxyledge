@@ -101,9 +101,9 @@ export function UserButton() {
   if (!user) return null;
   const label = user.displayName ?? user.primaryEmail ?? "Account";
   const avatar = user.profileImageUrl ? (
-    <img src={user.profileImageUrl} alt="" className="size-8 rounded-full object-cover" />
+    <img src={user.profileImageUrl} alt="" className="size-9 rounded-full object-cover ring-1 ring-white/30" />
   ) : (
-    <span className="grid size-8 place-items-center rounded-full bg-sand text-sm font-semibold text-ink">{label.charAt(0).toUpperCase()}</span>
+    <span className="grid size-9 place-items-center rounded-full bg-white/15 text-sm font-bold text-white ring-1 ring-white/20">{label.charAt(0).toUpperCase()}</span>
   );
   return (
     <details className="relative" onBlur={(event) => {
@@ -113,7 +113,7 @@ export function UserButton() {
       <summary className="flex list-none items-center rounded-full outline-offset-2 [&::-webkit-details-marker]:hidden" aria-label={`Account: ${label}`}>
         {avatar}
       </summary>
-      <div className="absolute right-0 top-10 z-40 w-60 rounded-lg border border-line bg-card p-1.5 shadow-lg shadow-black/10">
+      <div className="absolute right-0 top-11 z-40 w-64 rounded-2xl bg-card p-1.5 text-ink shadow-xl shadow-black/15 ring-1 ring-line">
         <div className="px-2.5 py-2">
           <p className="truncate text-sm font-semibold">{user.displayName ?? "Signed in"}</p>
           {user.primaryEmail ? <p className="truncate text-xs text-muted">{user.primaryEmail}</p> : null}
@@ -130,7 +130,7 @@ export function UserButton() {
                 .then(() => signOut())
                 .catch(() => setSigningOut(false));
             }}
-            className="flex h-10 w-full items-center rounded-md px-2.5 text-left text-sm hover:bg-sand disabled:cursor-wait"
+            className="flex h-10 w-full items-center rounded-xl px-2.5 text-left text-sm font-semibold text-rust hover:bg-sand disabled:cursor-wait"
           >
             {signingOut ? "Signing out…" : "Sign out"}
           </button>

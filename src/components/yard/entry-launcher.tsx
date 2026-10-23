@@ -250,17 +250,17 @@ export function EntryLauncher({
       {!sheet ? (
         <button
           type="button"
-          className="no-print btn btn-rust fixed bottom-[4.5rem] right-4 z-30 h-12 gap-1.5 rounded-lg px-4 text-[0.95rem] shadow-md shadow-black/20 lg:bottom-6 lg:right-6 lg:h-11"
+          className="no-print btn btn-gold fixed bottom-[4.75rem] right-4 z-30 h-[3.25rem] gap-1.5 rounded-2xl px-5 text-[0.95rem] font-extrabold lg:bottom-6 lg:right-6 lg:h-12"
           onClick={() => setSheet({ key: Date.now(), mode: null, entry: null, company: "" })}
         >
-          <Plus className="size-5" aria-hidden />
+          <Plus className="size-5" strokeWidth={2.75} aria-hidden />
           New entry
         </button>
       ) : null}
 
       {toast || undoNote ? (
-        <div className="no-print fixed inset-x-3 bottom-[8.25rem] z-40 mx-auto max-w-md lg:inset-x-auto lg:bottom-20 lg:right-6 lg:w-[26rem]" role="status">
-          <div className="rounded-lg bg-[#16191d] text-sm text-white shadow-lg shadow-black/25 dark:border dark:border-line">
+        <div className="no-print fixed inset-x-3 bottom-[8.75rem] z-40 mx-auto max-w-md lg:inset-x-auto lg:bottom-24 lg:right-6 lg:w-[26rem]" role="status">
+          <div className="navy rounded-2xl text-sm shadow-xl shadow-black/25">
             <div className="flex items-start gap-2 py-2.5 pl-3.5 pr-1.5">
               <span className="min-w-0 flex-1 pt-1">{toast ? toast.text : undoNote}</span>
               <button type="button" className="grid size-8 shrink-0 place-items-center rounded-md text-white/70 hover:bg-white/10 hover:text-white" aria-label="Dismiss" onClick={() => (toast ? setToast(null) : setUndoNote(""))}>
@@ -268,7 +268,7 @@ export function EntryLauncher({
               </button>
             </div>
             {toast ? (
-              <div className="flex flex-wrap gap-x-1 border-t border-white/10 px-1.5 py-1 [&>button]:h-9 [&>button]:rounded-md [&>button]:px-2 [&>button]:font-semibold [&>button]:text-[#a9c4f5] [&>button]:no-underline [&>button:hover]:bg-white/10">
+              <div className="flex flex-wrap gap-x-1 border-t border-white/10 px-1.5 py-1 [&>button]:h-9 [&>button]:rounded-md [&>button]:px-2 [&>button]:font-semibold [&>button]:text-gold [&>button]:no-underline [&>button:hover]:bg-white/10">
                 {toast.billFor ? (
                   <button type="button" className="" disabled={billing} onClick={() => void makeBill(toast.billFor!)}>
                     {billing ? "Opening…" : "Make bill"}
@@ -636,17 +636,17 @@ function EntrySheet({
 
   return (
     <div className="no-print fixed inset-0 z-50 flex lg:items-center lg:justify-center lg:bg-black/40 lg:p-6" role="dialog" aria-modal="true" aria-label={title}>
-      <div className="flex h-full w-full flex-col bg-paper lg:h-auto lg:max-h-[90vh] lg:max-w-2xl lg:overflow-hidden lg:rounded-lg lg:border lg:border-line lg:shadow-2xl">
-        <header className="flex items-center gap-2 border-b border-line bg-card px-2 py-2 sm:px-3">
+      <div className="flex h-full w-full flex-col bg-paper lg:h-auto lg:max-h-[90vh] lg:max-w-2xl lg:overflow-hidden lg:rounded-3xl lg:shadow-2xl">
+        <header className="navy flex items-center gap-2 px-2 py-2.5 sm:px-3">
           {mode && !editing ? (
-            <button type="button" className="grid size-11 place-items-center rounded-lg hover:bg-sand" aria-label="Back to the choices" onClick={() => setMode(null)}>
+            <button type="button" className="grid size-11 place-items-center rounded-xl hover:bg-white/10" aria-label="Back to the choices" onClick={() => setMode(null)}>
               <ChevronLeft className="size-5" aria-hidden />
             </button>
           ) : (
             <span className="w-2" />
           )}
-          <h2 className="min-w-0 flex-1 truncate text-lg font-semibold">{title}</h2>
-          <button type="button" className="grid size-11 place-items-center rounded-lg hover:bg-sand" aria-label="Close" onClick={requestClose}>
+          <h2 className="min-w-0 flex-1 truncate text-lg font-bold">{title}</h2>
+          <button type="button" className="grid size-11 place-items-center rounded-xl hover:bg-white/10" aria-label="Close" onClick={requestClose}>
             <X className="size-5" aria-hidden />
           </button>
         </header>
@@ -665,17 +665,17 @@ function EntrySheet({
 
         <div ref={body} className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
           {!mode ? (
-            <ul className="-mx-4 border-y border-line bg-card sm:mx-0 sm:rounded-lg sm:border">
+            <ul className="flex flex-col gap-2.5">
               {MODES.map((item) => {
                 const Icon = item.icon;
                 return (
-                  <li key={item.id} className="border-b border-line last:border-b-0">
-                    <button type="button" className="flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-sand focus-visible:bg-sand" onClick={() => choose(item.id)}>
-                      <span className={cn("grid size-9 shrink-0 place-items-center rounded-md", item.id === "money" ? "bg-pine/10 text-pine" : "bg-brand-soft text-brand")}>
-                        <Icon className="size-[1.1rem]" aria-hidden />
+                  <li key={item.id} className="card overflow-hidden">
+                    <button type="button" className="flex w-full items-center gap-3.5 px-4 py-3.5 text-left hover:bg-sand/60 focus-visible:bg-sand" onClick={() => choose(item.id)}>
+                      <span className={cn("grid size-11 shrink-0 place-items-center rounded-xl", item.id === "money" ? "bg-pine/10 text-pine" : item.id === "take" ? "bg-pine/10 text-pine" : item.id === "bought" ? "bg-brand-soft text-brand" : "bg-gold-soft text-[#b86200]")}>
+                        <Icon className="size-5" strokeWidth={2.2} aria-hidden />
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block font-semibold leading-tight">{item.title}</span>
+                        <span className="block font-bold leading-tight">{item.title}</span>
                         <span className="block text-xs text-muted">{item.hint}</span>
                       </span>
                       <ChevronRight className="size-4 shrink-0 text-muted" aria-hidden />
@@ -788,9 +788,9 @@ function EntrySheet({
 function Section({ title, tone, plain, children }: { title: string; tone?: "pine" | "rust"; plain?: boolean; children: ReactNode }) {
   if (plain) return <div className="grid gap-3">{children}</div>;
   return (
-    <section className="rounded-lg border border-line bg-card p-3 sm:p-4">
-      <h3 className={cn("label mb-3 flex items-center gap-2 border-b border-line pb-2", tone === "pine" ? "text-pine" : tone === "rust" ? "text-brand" : "")}>
-        <span className={cn("size-1.5 rounded-full", tone === "pine" ? "bg-pine" : "bg-brand")} aria-hidden />
+    <section className="card p-3 sm:p-4">
+      <h3 className={cn("label mb-3 flex items-center gap-2", tone === "pine" ? "text-pine" : tone === "rust" ? "text-[#b86200]" : "")}>
+        <span className={cn("size-2 rounded-full", tone === "pine" ? "bg-pine" : "bg-gold")} aria-hidden />
         {title}
       </h3>
       <div className="grid gap-3">{children}</div>

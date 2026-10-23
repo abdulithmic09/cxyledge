@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ArrowDownLeft, ArrowUpRight, CloudOff, PackagePlus, Plus, Search, Trash2 } from "lucide-react";
 import {
@@ -15,7 +15,7 @@ import { companyBalances, movementLabel, paymentLabel } from "@/lib/inventory/an
 import { formatDay } from "@/lib/inventory/model";
 import { rupee } from "@/lib/inventory/serials";
 import { cn } from "@/lib/cn";
-import { PageHead, Tally } from "@/components/yard/ui";
+
 import { useRole } from "@/lib/inventory/role";
 import { onShowEntry, openEntrySheet, takePendingShow } from "@/components/yard/entry-launcher";
 import { useOutbox } from "@/lib/inventory/outbox";
@@ -57,6 +57,7 @@ export function BookView({
   yardId,
   onChanged,
   syncedAt,
+  notice,
 }: {
   entries: Entry[];
   payments: Payment[];
@@ -66,6 +67,7 @@ export function BookView({
   logs?: ReturnLog[];
   onChanged: () => void;
   syncedAt: number;
+  notice?: ReactNode;
 }) {
   const { canEdit, isOwner } = useRole();
   const [undo, setUndo] = useState<{ id: string; label: string } | null>(null);
@@ -163,12 +165,39 @@ export function BookView({
     else days.push({ day: entry.entryDate, rows: [entry] });
   }
 
+  const today = isoDay(new Date());
+  const backToday = entries.filter((entry) => entry.movement === "return" && entry.entryDate === today).reduce((sum, entry) => sum + entry.quantity, 0);
+  const owing = balances.filter((row) => row.toCollect > 0).length;
+
   return (
     <div className="flex flex-col gap-3">
-      <PageHead title="Book" detail={`${entries.length} ${entries.length === 1 ? "line" : "lines"}${synced ? ` · synced ${synced}` : ""}`} />
+      <section className="navy -mx-4 -mt-4 px-5 pb-16 pt-4 lg:mx-0 lg:mt-0 lg:rounded-2xl lg:px-7 lg:pb-16 lg:pt-6">
+        <p className="text-[0.8rem] font-medium text-white/70">To collect</p>
+        <p className="mt-0.5 text-[2.1rem] font-extrabold leading-none tracking-tight tabular-nums">{rupee(toCollect, 0)}</p>
+        <p className="mt-2 flex items-center gap-1.5 text-xs text-white/70">
+          <span className="size-1.5 rounded-full bg-[#5ee0a0]" aria-hidden />
+          {owing ? `from ${owing} ${owing === 1 ? "customer" : "customers"}` : "Nobody owes you"} · {entries.length} {entries.length === 1 ? "line" : "lines"}
+          {synced ? ` · synced ${synced}` : ""}
+        </p>
+      </section>
+      <div className="tally relative -mt-14 mx-1 grid-cols-3 text-center lg:mx-5">
+        <div>
+          <p className="text-xl font-extrabold tabular-nums">{stillOut}</p>
+          <p className="text-[0.7rem] font-medium text-muted">Cylinders out</p>
+        </div>
+        <div>
+          <p className="text-xl font-extrabold tabular-nums text-pine">{backToday}</p>
+          <p className="text-[0.7rem] font-medium text-muted">Back today</p>
+        </div>
+        <div>
+          <p className={cn("text-xl font-extrabold tabular-nums", owing && "text-rust")}>{owing}</p>
+          <p className="text-[0.7rem] font-medium text-muted">Owe you</p>
+        </div>
+      </div>
+      {notice}
 
       {undo ? (
-        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-line bg-card px-3.5 py-2.5 text-sm" role="status">
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 card px-3.5 py-2.5 text-sm" role="status">
           <span className="min-w-0 flex-1">Deleted {undo.label}. Kept in Settings → Recently deleted for 30 days.</span>
           <button type="button" className="font-semibold text-brand" disabled={restore.isPending} onClick={() => restore.mutate(undo.id)}>
             Undo
@@ -179,20 +208,13 @@ export function BookView({
         </p>
       ) : null}
       {error ? (
-        <p role="alert" className="rounded-lg border border-rust/30 bg-rust/5 px-3.5 py-2.5 text-sm text-rust">
+        <p role="alert" className="rounded-xl bg-rust/10 px-4 py-3 text-sm font-medium text-rust">
           {error}
         </p>
       ) : null}
 
-      <Tally
-        items={[
-          { label: "Out with customers", value: stillOut },
-          { label: "To collect", value: rupee(toCollect, 0), tone: toCollect > 0 ? "rust" : undefined },
-        ]}
-      />
-
       {waiting.length ? (
-        <div className="rounded-lg border border-dashed border-line bg-card px-3.5 py-2.5 text-sm" role="status">
+        <div className="card px-4 py-3 text-sm" role="status">
           <p className="flex items-center gap-2 font-semibold">
             <CloudOff className="size-4 text-muted" aria-hidden /> {waiting.length} waiting for internet
           </p>
@@ -209,9 +231,9 @@ export function BookView({
         <div className="flex min-w-0 flex-1 gap-2 lg:max-w-md">
           <div className="relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" aria-hidden />
-            <input className="field pl-9" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Company, serial or bill no." aria-label="Search entries" />
+            <input className="field border-transparent pl-9 shadow-card" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Company, serial or bill no." aria-label="Search entries" />
           </div>
-          <select className="field w-auto shrink-0" value={when} onChange={(event) => setWhen(event.target.value as When)} aria-label="Date">
+          <select className="field w-auto shrink-0 border-transparent font-semibold shadow-card" value={when} onChange={(event) => setWhen(event.target.value as When)} aria-label="Date">
             <option value="all">Any date</option>
             <option value="today">Today</option>
             <option value="week">Last 7 days</option>
@@ -227,7 +249,7 @@ export function BookView({
                 </button>
               ))}
             </div>
-            <select className="field !h-9 w-auto text-sm" value={filter} onChange={(event) => setFilter(event.target.value as PaymentStatus | "all")} aria-label="Payment">
+            <select className="field !h-9 w-auto !rounded-full border-transparent text-sm font-semibold shadow-card" value={filter} onChange={(event) => setFilter(event.target.value as PaymentStatus | "all")} aria-label="Payment">
               <option value="all">Any payment</option>
               {PAYMENTS.map((payment) => (
                 <option key={payment.id} value={payment.id}>
@@ -240,7 +262,7 @@ export function BookView({
       </div>
 
       {shown.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-line bg-card px-4 py-8 text-center">
+        <div className="card px-4 py-10 text-center">
           <p className="text-sm text-muted">{entries.length === 0 ? "Nothing in the book yet." : "Nothing matches these filters."}</p>
           {entries.length === 0 && canEdit ? (
             <button type="button" className="btn btn-rust mt-3 gap-2" onClick={() => openEntrySheet()}>
@@ -254,8 +276,8 @@ export function BookView({
           ) : null}
         </div>
       ) : (
-        <div className="-mx-4 border-y border-line bg-card sm:mx-0 sm:rounded-lg sm:border">
-          <div className="label hidden grid-cols-[2rem_minmax(0,1.3fr)_minmax(0,1.6fr)_7.5rem_7rem] gap-3 border-b border-line px-4 py-2 lg:grid">
+        <div className="flex flex-col gap-1">
+          <div className="label hidden grid-cols-[2.5rem_minmax(0,1.3fr)_minmax(0,1.6fr)_7.5rem_7rem] gap-3 px-4 pt-1 lg:grid">
             <span />
             <span>Company</span>
             <span>Cylinders</span>
@@ -264,8 +286,8 @@ export function BookView({
           </div>
           {days.map((group) => (
             <section key={group.day} aria-label={formatDay(group.day)}>
-              <h3 className="label sticky top-14 z-[1] border-b border-line bg-sand px-4 py-1.5">{formatDay(group.day)}</h3>
-              <ul>
+              <h3 className="label px-1 pb-1.5 pt-3">{group.day === today ? `Today · ${formatDay(group.day)}` : formatDay(group.day)}</h3>
+              <ul className="flex flex-col gap-2">
                 {group.rows.map((entry) => {
                   const isReturn = entry.movement === "return";
                   const parent = isReturn && entry.parentId ? byId.get(entry.parentId) : undefined;
@@ -274,24 +296,24 @@ export function BookView({
                   const Glyph = entry.movement === "return" ? ArrowDownLeft : entry.movement === "purchase" ? PackagePlus : ArrowUpRight;
                   const status = isReturn ? "Returned" : entry.movement === "purchase" ? (entry.paymentStatus === "received" ? "Paid" : entry.paymentStatus === "partial" ? "Part paid" : "Not paid") : paymentLabel(entry.paymentStatus);
                   return (
-                    <li key={entry.id} id={`entry-${entry.id}`} className={cn("border-b border-line transition-colors duration-700 last:border-b-0", flash === entry.id && "bg-brand-soft")}>
+                    <li key={entry.id} id={`entry-${entry.id}`} className={cn("card overflow-hidden transition-shadow duration-700", flash === entry.id && "ring-2 ring-gold")}>
                       <button
                         type="button"
                         aria-expanded={open}
-                        className="grid w-full grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 px-4 py-2.5 text-left hover:bg-sand/60 lg:grid-cols-[2rem_minmax(0,1.3fr)_minmax(0,1.6fr)_7.5rem_7rem]"
+                        className="grid w-full grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 px-3.5 py-3 text-left hover:bg-sand/50 lg:grid-cols-[2.5rem_minmax(0,1.3fr)_minmax(0,1.6fr)_7.5rem_7rem] lg:px-4"
                         onClick={() => setExpanded(open ? null : entry.id)}
                       >
                         <span
                           className={cn(
-                            "grid size-8 place-items-center rounded-md",
-                            isReturn ? "bg-pine/10 text-pine" : entry.movement === "purchase" ? "bg-brand-soft text-brand" : "bg-rust/10 text-rust",
+                            "grid size-10 place-items-center rounded-xl",
+                            isReturn ? "bg-pine/10 text-pine" : entry.movement === "purchase" ? "bg-brand-soft text-brand" : "bg-gold-soft text-[#b86200]",
                           )}
                           aria-label={WORD[entry.movement] ?? movementLabel(entry.movement)}
                         >
-                          <Glyph className="size-4" aria-hidden />
+                          <Glyph className="size-[1.1rem]" strokeWidth={2.4} aria-hidden />
                         </span>
                         <span className="min-w-0">
-                          <span className="block truncate font-medium">{entry.companyName}</span>
+                          <span className="block truncate text-[0.95rem] font-bold">{entry.companyName}</span>
                           <span className="block truncate text-xs text-muted lg:hidden">
                             {WORD[entry.movement] ?? movementLabel(entry.movement)} {entry.quantity}
                             {entry.cylinderType ? ` × ${entry.cylinderType}` : ""}
@@ -306,19 +328,14 @@ export function BookView({
                           {serials.length ? <span className="code block truncate text-xs text-muted">{serials.slice(0, 4).join(", ")}{serials.length > 4 ? ` +${serials.length - 4}` : ""}</span> : null}
                         </span>
                         <span className="text-right lg:contents">
-                          <span className="block text-sm font-semibold tabular-nums lg:text-right">{isReturn ? `+${entry.quantity}` : entry.amountDue != null ? rupee(entry.amountDue, 0) : "—"}</span>
-                          <span
-                            className={cn(
-                              "block text-xs lg:text-right lg:text-sm",
-                              isReturn || entry.paymentStatus === "received" ? "text-pine" : entry.paymentStatus === "partial" ? "text-ink" : "text-rust",
-                            )}
-                          >
-                            {status}
+                          <span className="block text-[0.95rem] font-bold tabular-nums lg:text-right">{isReturn ? `+${entry.quantity}` : entry.amountDue != null ? rupee(entry.amountDue, 0) : "—"}</span>
+                          <span className="mt-0.5 block lg:mt-0 lg:text-right">
+                            <span className={cn("tag", isReturn || entry.paymentStatus === "received" ? "tag-ok" : entry.paymentStatus === "partial" ? "tag-part" : "tag-due")}>{status}</span>
                           </span>
                         </span>
                       </button>
                       {open ? (
-                        <div className="grid gap-2 border-t border-dashed border-line bg-paper/60 px-4 py-3 pl-[3.75rem] text-sm">
+                        <div className="grid gap-2 border-t border-line bg-sand/40 px-4 py-3 text-sm lg:pl-[4.25rem]">
                           <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-3 gap-y-1">
                             {serials.length ? (
                               <>
@@ -397,7 +414,7 @@ export function BookView({
             </section>
           ))}
           {shown.length > limit ? (
-            <button type="button" className="w-full border-t border-line px-4 py-3 text-sm font-medium text-brand hover:bg-sand" onClick={() => setLimit((value) => value + 100)}>
+            <button type="button" className="card mt-2 w-full px-4 py-3 text-sm font-bold text-brand hover:bg-sand" onClick={() => setLimit((value) => value + 100)}>
               Show {Math.min(100, shown.length - limit)} older lines
             </button>
           ) : null}

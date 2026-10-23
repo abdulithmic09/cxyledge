@@ -113,7 +113,7 @@ export function UsersView({ yardName }: { yardName: string }) {
       {members.isError ? <p className="text-sm text-rust">Couldn&apos;t load the people in this book. Pull to refresh or try again shortly.</p> : null}
 
       {isOwner ? (
-        <div className="rounded-xl border border-line bg-card px-4 py-3 text-sm">
+        <div className="card px-4 py-3 text-sm">
           <p className="font-semibold">Who can do what</p>
           <ul className="mt-1 flex flex-col gap-0.5 text-muted">
             {(["owner", "staff", "viewer"] as Role[]).map((role) => (

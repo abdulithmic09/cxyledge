@@ -82,7 +82,7 @@ function BootScreen({ label }: { label: string }) {
   return (
     <main className="grid min-h-screen place-items-center bg-paper px-6 text-ink">
       <div className="flex flex-col items-center gap-3 text-center">
-        <span className="grid size-10 place-items-center rounded-md bg-brand text-brand-fg">
+        <span className="grid size-11 place-items-center rounded-xl bg-gold text-gold-fg">
           <Cylinder className="size-5" aria-hidden />
         </span>
         <p className="text-sm text-muted">{label}</p>
@@ -101,22 +101,26 @@ function SignedOut() {
       .catch(() => {});
   }, []);
   return (
-    <main className="grid min-h-screen place-items-center bg-paper px-4 py-10 text-ink">
-      <div className="w-full max-w-sm">
-        <div className="mb-5 flex items-center gap-2.5">
-          <span className="grid size-9 place-items-center rounded-md bg-brand text-brand-fg">
-            <Cylinder className="size-[1.1rem]" aria-hidden />
+    <main className="relative grid min-h-screen place-items-center bg-paper px-4 py-10 text-ink">
+      <div className="navy absolute inset-x-0 top-0 h-[42vh]" aria-hidden />
+      <div className="relative w-full max-w-sm">
+        <div className="mb-6 flex items-center gap-2.5 text-white">
+          <span className="grid size-10 place-items-center rounded-xl bg-gold text-gold-fg">
+            <Cylinder className="size-5" aria-hidden />
           </span>
-          <p className="text-lg font-semibold">Cxyledge</p>
+          <div>
+            <p className="text-lg font-bold leading-tight">Cxyledge</p>
+            <p className="text-xs text-white/70">Cylinder book for gas agencies</p>
+          </div>
         </div>
-        <div className="rounded-lg border border-line bg-card p-5">
+        <div className="card p-6 shadow-xl shadow-black/10">
           {invitedTo ? (
             <p className="mb-4 rounded-md bg-brand-soft px-3 py-2.5 text-sm" role="status">
               You&apos;re invited to <span className="font-semibold">{invitedTo}</span>. Sign in and you&apos;ll go straight into that book.
             </p>
           ) : null}
-          <h1 className="text-lg font-semibold">Sign in or create an account</h1>
-          <p className="mt-1 text-sm text-muted">Cylinders, bills and payments for your yard.</p>
+          <h1 className="text-xl font-bold">Welcome</h1>
+          <p className="mt-1 text-sm text-muted">Sign in or create an account to open your book.</p>
           <div className="mt-4">
             <SignInPanel />
           </div>
@@ -221,19 +225,18 @@ function Shell({ userId }: { userId: string }) {
   return (
     <RoleContext.Provider value={role}>
     <div className="min-h-screen bg-paper text-ink">
-      <header className="no-print sticky top-0 z-20 border-b border-line bg-card">
-        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-3 px-4 lg:px-6">
+      <header className="no-print navy-flat sticky top-0 z-20">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 lg:px-6">
           <div className="flex min-w-0 items-center gap-2.5">
-            <span className="grid size-8 shrink-0 place-items-center rounded-md bg-brand text-brand-fg">
-              <Cylinder className="size-4" aria-hidden />
+            <span className="grid size-9 shrink-0 place-items-center rounded-[0.65rem] bg-gold text-gold-fg shadow-sm">
+              <Cylinder className="size-[1.1rem]" aria-hidden />
             </span>
-            <p className="flex min-w-0 items-baseline gap-2 leading-tight">
-              <span className="shrink-0 text-[0.95rem] font-semibold">Cxyledge</span>
-              <span className="truncate text-sm text-muted">
-                <span className="mr-2 text-line" aria-hidden>/</span>
+            <p className="min-w-0 leading-tight">
+              <span className="block text-[0.95rem] font-bold">Cxyledge</span>
+              <span className="flex items-center gap-1.5 truncate text-xs text-white/70">
                 {yard?.name ?? "Shared yard"}
+                {yard && role !== "owner" ? <span className="shrink-0 rounded bg-white/15 px-1.5 py-px text-[0.65rem] font-semibold text-white">{ROLE_LABEL[role]}</span> : null}
               </span>
-              {yard && role !== "owner" ? <span className="shrink-0 rounded bg-sand px-1.5 py-0.5 text-[0.7rem] font-semibold text-ink">{ROLE_LABEL[role]}</span> : null}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -268,8 +271,8 @@ function Shell({ userId }: { userId: string }) {
       </header>
 
       <div className="mx-auto grid max-w-7xl lg:grid-cols-[12.5rem_minmax(0,1fr)]">
-        <aside className="no-print hidden border-r border-line lg:block">
-          <nav className="sticky top-14 flex flex-col gap-0.5 px-3 py-4" aria-label="Sections">
+        <aside className="no-print hidden lg:block">
+          <nav className="sticky top-16 flex flex-col gap-1 px-3 py-5" aria-label="Sections">
             {NAV.map((item) => {
               const Icon = item.icon;
               const on = view === item.id;
@@ -279,8 +282,8 @@ function Shell({ userId }: { userId: string }) {
                   type="button"
                   aria-current={on ? "page" : undefined}
                   className={cn(
-                    "flex h-9 items-center gap-2.5 rounded-md px-2.5 text-left text-sm",
-                    on ? "bg-brand-soft font-semibold text-brand" : "text-muted hover:bg-sand hover:text-ink",
+                    "flex h-10 items-center gap-2.5 rounded-xl px-3 text-left text-sm font-medium",
+                    on ? "bg-card font-bold text-ink shadow-card [&>svg]:text-gold" : "text-muted hover:bg-card/70 hover:text-ink",
                   )}
                   onClick={() => {
                     setFocusCompany(null);
@@ -322,15 +325,14 @@ function Shell({ userId }: { userId: string }) {
               </button>
             </p>
           ) : null}
-          {yard && role === "owner" && online && view === "book" ? <BackupReminder yard={yard} hasData={entries.length > 0} onDone={refresh} /> : null}
           {yard && role === "viewer" ? (
-            <p className="mb-4 rounded-xl border border-line bg-card px-4 py-3 text-sm text-muted" role="status">
+            <p className="mb-4 card px-4 py-3 text-sm text-muted" role="status">
               You have view-only access to {yard.name}. You can look at everything and export reports, but not change anything.
             </p>
           ) : null}
           {loading ? <p className="text-sm text-muted">Loading the shared book…</p> : null}
           {!loading && yard && view === "book" ? (
-            <BookView entries={entries} payments={payments} cylinderTypes={yard.cylinderTypes} userId={userId} yardId={yard.id} logs={returnQuery.data ?? []} onChanged={refresh} syncedAt={entryQuery.dataUpdatedAt} />
+            <BookView entries={entries} payments={payments} cylinderTypes={yard.cylinderTypes} userId={userId} yardId={yard.id} logs={returnQuery.data ?? []} onChanged={refresh} syncedAt={entryQuery.dataUpdatedAt} notice={role === "owner" && online ? <BackupReminder yard={yard} hasData={entries.length > 0} onDone={refresh} /> : null} />
           ) : null}
           {!loading && yard && view === "customers" ? (
             <CustomersView
@@ -360,18 +362,20 @@ function Shell({ userId }: { userId: string }) {
           {!loading && yard && view === "more" ? (
             <div className="flex flex-col gap-4">
               <h2 className="text-xl font-semibold sm:text-2xl">More</h2>
-              <ul className="-mx-4 overflow-hidden border-y border-line bg-card sm:mx-0 sm:rounded-lg sm:border">
+              <ul className="card overflow-hidden">
                 {MORE.map((item) => {
                   const Icon = item.icon;
                   const dot = item.id === "setup" && role === "owner" && backupDue(yard) && entries.length > 0;
                   return (
                     <li key={item.id} className="border-b border-line last:border-b-0">
                       <button type="button" className="flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-sand" onClick={() => setView(item.id)}>
-                        <Icon className="size-5 shrink-0 text-muted" aria-hidden />
+                        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-soft text-brand">
+                          <Icon className="size-5" aria-hidden />
+                        </span>
                         <span className="min-w-0 flex-1">
                           <span className="flex items-center gap-2 font-semibold">
                             {item.label}
-                            {dot ? <span className="rounded bg-rust/10 px-1.5 py-0.5 text-[0.7rem] font-semibold text-rust">Backup due</span> : null}
+                            {dot ? <span className="tag tag-due">Backup due</span> : null}
                           </span>
                           <span className="block text-xs text-muted">{item.hint}</span>
                         </span>
@@ -417,8 +421,8 @@ function Shell({ userId }: { userId: string }) {
                 type="button"
                 aria-current={on ? "page" : undefined}
                 className={cn(
-                  "relative flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[0.7rem]",
-                  on ? "font-semibold text-brand before:absolute before:inset-x-5 before:top-0 before:h-0.5 before:rounded-b before:bg-brand" : "text-muted",
+                  "relative flex min-h-[3.75rem] min-w-0 flex-1 flex-col items-center justify-center gap-1 text-[0.7rem] font-semibold",
+                  on ? "text-ink [&_svg]:text-gold" : "text-muted",
                 )}
                 onClick={() => {
                   setFocusCompany(null);
