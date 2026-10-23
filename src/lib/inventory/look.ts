@@ -55,7 +55,7 @@ export function writeLook(look: Look) {
 export function readableOn(hex: string): string {
   const v = parseInt(hex.slice(1), 16);
   const lum = (0.299 * (v >> 16) + 0.587 * ((v >> 8) & 255) + 0.114 * (v & 255)) / 255;
-  return lum > 0.6 ? "#1c1915" : "#fffdf8";
+  return lum > 0.6 ? "#16191d" : "#ffffff";
 }
 
 const CUSTOM_VARS = [
@@ -65,8 +65,9 @@ const CUSTOM_VARS = [
   "--color-line",
   "--color-ink",
   "--color-muted",
-  "--color-rust",
-  "--color-rust-fg",
+  "--color-brand",
+  "--color-brand-fg",
+  "--color-brand-soft",
 ];
 
 export function applyLook(look: Look) {
@@ -92,10 +93,11 @@ export function applyLook(look: Look) {
   }
   if (text) {
     root.style.setProperty("--color-ink", text);
-    root.style.setProperty("--color-muted", `color-mix(in srgb, ${text} 70%, ${background || (dark ? "#1a1714" : "#f3efe6")} 30%)`);
+    root.style.setProperty("--color-muted", `color-mix(in srgb, ${text} 70%, ${background || (dark ? "#0e1114" : "#f2f3f5")} 30%)`);
   }
   if (accent) {
-    root.style.setProperty("--color-rust", accent);
-    root.style.setProperty("--color-rust-fg", readableOn(accent));
+    root.style.setProperty("--color-brand", accent);
+    root.style.setProperty("--color-brand-fg", readableOn(accent));
+    root.style.setProperty("--color-brand-soft", `color-mix(in srgb, ${accent} 12%, ${background || (dark ? "#161a1f" : "#ffffff")})`);
   }
 }

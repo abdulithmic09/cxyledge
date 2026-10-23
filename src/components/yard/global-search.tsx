@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Building2, ChevronRight, Cylinder, LayoutList, Receipt, Search, X } from "lucide-react";
 import { listCompanyMeta, type Entry, type Payment } from "@/lib/inventory/api";
@@ -35,10 +36,17 @@ export function GlobalSearch(props: Props) {
   }, []);
   return (
     <>
-      <button type="button" className="grid size-11 place-items-center rounded-lg border border-line bg-card hover:bg-sand" aria-label="Search the whole book" onClick={() => setOpen(true)}>
-        <Search className="size-5" aria-hidden />
+      <button
+        type="button"
+        className="flex size-10 items-center justify-center gap-2 rounded-md text-muted hover:bg-sand hover:text-ink lg:h-9 lg:w-72 lg:justify-start lg:border lg:border-line lg:bg-paper lg:px-3 lg:text-sm"
+        aria-label="Search the whole book"
+        onClick={() => setOpen(true)}
+      >
+        <Search className="size-[1.1rem] shrink-0" aria-hidden />
+        <span className="hidden flex-1 text-left lg:block">Search customers, serials, bills</span>
+        <kbd className="hidden rounded border border-line bg-card px-1.5 text-[0.7rem] font-medium lg:block">/</kbd>
       </button>
-      {open ? <SearchSheet {...props} onClose={() => setOpen(false)} /> : null}
+      {open ? createPortal(<SearchSheet {...props} onClose={() => setOpen(false)} />, document.body) : null}
     </>
   );
 }
@@ -92,8 +100,8 @@ function SearchSheet({ entries, payments, onOpenCompany, onOpenEntry, onOpenBill
   };
 
   return (
-    <div className="no-print fixed inset-0 z-50 flex lg:items-start lg:justify-center lg:bg-ink/40 lg:p-6 lg:pt-20" role="dialog" aria-modal="true" aria-label="Search">
-      <div className="flex h-full w-full flex-col bg-paper lg:h-auto lg:max-h-[80vh] lg:max-w-xl lg:overflow-hidden lg:rounded-2xl lg:border lg:border-line lg:shadow-2xl">
+    <div className="no-print fixed inset-0 z-50 flex lg:items-start lg:justify-center lg:bg-black/40 lg:p-6 lg:pt-20" role="dialog" aria-modal="true" aria-label="Search">
+      <div className="flex h-full w-full flex-col bg-paper lg:h-auto lg:max-h-[80vh] lg:max-w-xl lg:overflow-hidden lg:rounded-lg lg:border lg:border-line lg:shadow-2xl">
         <div className="flex items-center gap-2 border-b border-line bg-card px-3 py-2">
           <Search className="size-5 shrink-0 text-muted" aria-hidden />
           <input

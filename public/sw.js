@@ -3,7 +3,7 @@
 // - The book's data is fetched fresh every time; the last good copy is used only when the
 //   network fails or is too slow, so you can still read the book in a yard with weak signal.
 // - Saving changes always needs the internet; nothing is queued.
-const VERSION = "cxyledge-v1";
+const VERSION = "cxyledge-v2";
 const SHELL = `${VERSION}-shell`;
 const DATA = `${VERSION}-data`;
 const DATA_TIMEOUT_MS = 6000;

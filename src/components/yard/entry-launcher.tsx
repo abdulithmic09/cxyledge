@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, ChevronLeft, IndianRupee, PackagePlus, Plus, X } from "lucide-react";
+import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, ChevronLeft, ChevronRight, IndianRupee, PackagePlus, Plus, X } from "lucide-react";
 import {
   createEntry,
   createPayment,
@@ -250,7 +250,7 @@ export function EntryLauncher({
       {!sheet ? (
         <button
           type="button"
-          className="no-print btn btn-rust fixed bottom-[5.25rem] right-4 z-30 h-14 gap-2 rounded-full px-5 text-base shadow-lg shadow-ink/25 lg:bottom-8 lg:right-8"
+          className="no-print btn btn-rust fixed bottom-[4.5rem] right-4 z-30 h-12 gap-1.5 rounded-lg px-4 text-[0.95rem] shadow-md shadow-black/20 lg:bottom-6 lg:right-6 lg:h-11"
           onClick={() => setSheet({ key: Date.now(), mode: null, entry: null, company: "" })}
         >
           <Plus className="size-5" aria-hidden />
@@ -259,25 +259,25 @@ export function EntryLauncher({
       ) : null}
 
       {toast || undoNote ? (
-        <div className="no-print fixed inset-x-4 bottom-[9.5rem] z-40 mx-auto max-w-md lg:bottom-28 lg:left-auto lg:right-8" role="status">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-ink px-4 py-3 text-sm text-paper shadow-lg">
-            <span className="min-w-0 flex-1">{toast ? toast.text : undoNote}</span>
-            {!toast ? (
-              <button type="button" className="grid size-8 place-items-center rounded-full hover:bg-paper/15" aria-label="Dismiss" onClick={() => setUndoNote("")}>
+        <div className="no-print fixed inset-x-3 bottom-[8.25rem] z-40 mx-auto max-w-md lg:inset-x-auto lg:bottom-20 lg:right-6 lg:w-[26rem]" role="status">
+          <div className="rounded-lg bg-[#16191d] text-sm text-white shadow-lg shadow-black/25 dark:border dark:border-line">
+            <div className="flex items-start gap-2 py-2.5 pl-3.5 pr-1.5">
+              <span className="min-w-0 flex-1 pt-1">{toast ? toast.text : undoNote}</span>
+              <button type="button" className="grid size-8 shrink-0 place-items-center rounded-md text-white/70 hover:bg-white/10 hover:text-white" aria-label="Dismiss" onClick={() => (toast ? setToast(null) : setUndoNote(""))}>
                 <X className="size-4" aria-hidden />
               </button>
-            ) : null}
+            </div>
             {toast ? (
-              <>
+              <div className="flex flex-wrap gap-x-1 border-t border-white/10 px-1.5 py-1 [&>button]:h-9 [&>button]:rounded-md [&>button]:px-2 [&>button]:font-semibold [&>button]:text-[#a9c4f5] [&>button]:no-underline [&>button:hover]:bg-white/10">
                 {toast.billFor ? (
-                  <button type="button" className="font-semibold underline" disabled={billing} onClick={() => void makeBill(toast.billFor!)}>
+                  <button type="button" className="" disabled={billing} onClick={() => void makeBill(toast.billFor!)}>
                     {billing ? "Opening…" : "Make bill"}
                   </button>
                 ) : null}
                 {toast.receipt ? (
                   <button
                     type="button"
-                    className="font-semibold underline"
+                    className=""
                     onClick={() => {
                       const payment = toast.receipt!;
                       void makeReceiptPdf({
@@ -301,7 +301,7 @@ export function EntryLauncher({
                 {toast.entryId ? (
                   <button
                     type="button"
-                    className="font-semibold underline"
+                    className=""
                     onClick={() => {
                       pendingShow = toast.entryId;
                       onShowBook();
@@ -313,14 +313,11 @@ export function EntryLauncher({
                   </button>
                 ) : null}
                 {toast.undo.length ? (
-                  <button type="button" className="font-semibold underline" disabled={undoing} onClick={() => void undo()}>
+                  <button type="button" className="" disabled={undoing} onClick={() => void undo()}>
                     {undoing ? "Undoing…" : "Undo"}
                   </button>
                 ) : null}
-                <button type="button" className="grid size-8 place-items-center rounded-full hover:bg-paper/15" aria-label="Dismiss" onClick={() => setToast(null)}>
-                  <X className="size-4" aria-hidden />
-                </button>
-              </>
+              </div>
             ) : null}
           </div>
         </div>
@@ -638,8 +635,8 @@ function EntrySheet({
           : "Add to the book";
 
   return (
-    <div className="no-print fixed inset-0 z-50 flex lg:items-center lg:justify-center lg:bg-ink/40 lg:p-6" role="dialog" aria-modal="true" aria-label={title}>
-      <div className="flex h-full w-full flex-col bg-paper lg:h-auto lg:max-h-[90vh] lg:max-w-2xl lg:overflow-hidden lg:rounded-2xl lg:border lg:border-line lg:shadow-2xl">
+    <div className="no-print fixed inset-0 z-50 flex lg:items-center lg:justify-center lg:bg-black/40 lg:p-6" role="dialog" aria-modal="true" aria-label={title}>
+      <div className="flex h-full w-full flex-col bg-paper lg:h-auto lg:max-h-[90vh] lg:max-w-2xl lg:overflow-hidden lg:rounded-lg lg:border lg:border-line lg:shadow-2xl">
         <header className="flex items-center gap-2 border-b border-line bg-card px-2 py-2 sm:px-3">
           {mode && !editing ? (
             <button type="button" className="grid size-11 place-items-center rounded-lg hover:bg-sand" aria-label="Back to the choices" onClick={() => setMode(null)}>
@@ -648,7 +645,7 @@ function EntrySheet({
           ) : (
             <span className="w-2" />
           )}
-          <h2 className="min-w-0 flex-1 truncate font-display text-2xl">{title}</h2>
+          <h2 className="min-w-0 flex-1 truncate text-lg font-semibold">{title}</h2>
           <button type="button" className="grid size-11 place-items-center rounded-lg hover:bg-sand" aria-label="Close" onClick={requestClose}>
             <X className="size-5" aria-hidden />
           </button>
@@ -657,7 +654,7 @@ function EntrySheet({
         {confirmClose ? (
           <div className="flex flex-wrap items-center gap-2 border-b border-line bg-sand px-4 py-3 text-sm">
             <span className="min-w-0 flex-1">{editing ? "Close without saving your changes?" : "Throw away this entry?"}</span>
-            <button type="button" className="btn btn-rust h-9 px-3 text-sm" onClick={onClose}>
+            <button type="button" className="btn btn-danger h-9 px-3 text-sm" onClick={onClose}>
               {editing ? "Close" : "Discard"}
             </button>
             <button type="button" className="btn btn-ghost h-9 px-3 text-sm" onClick={() => setConfirmClose(false)}>
@@ -668,33 +665,25 @@ function EntrySheet({
 
         <div ref={body} className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
           {!mode ? (
-            <div className="grid gap-3">
-              <p className="text-sm text-muted">What&apos;s happening?</p>
-              <div className="grid grid-cols-2 gap-3">
-                {MODES.map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className={cn(
-                        "flex min-h-32 flex-col items-start gap-2 rounded-xl border border-line bg-card p-4 text-left transition hover:border-pine hover:bg-sand focus-visible:border-pine",
-                        item.id === "money" && "col-span-2 min-h-0 flex-row items-center",
-                      )}
-                      onClick={() => choose(item.id)}
-                    >
-                      <span className={cn("grid size-10 shrink-0 place-items-center rounded-full", item.id === "take" || item.id === "money" ? "bg-pine text-pine-fg" : item.id === "bought" ? "bg-sand text-ink" : "bg-rust text-rust-fg")}>
-                        <Icon className="size-5" aria-hidden />
+            <ul className="-mx-4 border-y border-line bg-card sm:mx-0 sm:rounded-lg sm:border">
+              {MODES.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <li key={item.id} className="border-b border-line last:border-b-0">
+                    <button type="button" className="flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-sand focus-visible:bg-sand" onClick={() => choose(item.id)}>
+                      <span className={cn("grid size-9 shrink-0 place-items-center rounded-md", item.id === "money" ? "bg-pine/10 text-pine" : "bg-brand-soft text-brand")}>
+                        <Icon className="size-[1.1rem]" aria-hidden />
                       </span>
-                      <span className={cn(item.id === "money" ? "flex min-w-0 flex-col gap-0.5" : "contents")}>
-                        <span className="font-semibold leading-tight">{item.title}</span>
-                        <span className="text-xs leading-snug text-muted">{item.hint}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-semibold leading-tight">{item.title}</span>
+                        <span className="block text-xs text-muted">{item.hint}</span>
                       </span>
+                      <ChevronRight className="size-4 shrink-0 text-muted" aria-hidden />
                     </button>
-                  );
-                })}
-              </div>
-            </div>
+                  </li>
+                );
+              })}
+            </ul>
           ) : (
             <div className="grid gap-4">
               <div className="grid gap-3 sm:grid-cols-2">
@@ -799,8 +788,11 @@ function EntrySheet({
 function Section({ title, tone, plain, children }: { title: string; tone?: "pine" | "rust"; plain?: boolean; children: ReactNode }) {
   if (plain) return <div className="grid gap-3">{children}</div>;
   return (
-    <section className={cn("rounded-xl border bg-card p-3 sm:p-4", tone === "pine" ? "border-pine/40" : tone === "rust" ? "border-rust/40" : "border-line")}>
-      <h3 className={cn("mb-3 text-xs font-bold uppercase tracking-wider", tone === "pine" ? "text-pine" : "text-rust")}>{title}</h3>
+    <section className="rounded-lg border border-line bg-card p-3 sm:p-4">
+      <h3 className={cn("label mb-3 flex items-center gap-2 border-b border-line pb-2", tone === "pine" ? "text-pine" : tone === "rust" ? "text-brand" : "")}>
+        <span className={cn("size-1.5 rounded-full", tone === "pine" ? "bg-pine" : "bg-brand")} aria-hidden />
+        {title}
+      </h3>
       <div className="grid gap-3">{children}</div>
     </section>
   );
@@ -916,7 +908,7 @@ function TakeBackFields({
                         key={serial}
                         type="button"
                         aria-pressed={on}
-                        className={cn("min-h-10 rounded-lg border px-3 text-sm tabular-nums", on ? "border-pine bg-pine text-pine-fg" : "border-line bg-card")}
+                        className={cn("code min-h-10 rounded-md border px-3 text-sm", on ? "border-brand bg-brand text-brand-fg" : "border-line bg-card")}
                         onClick={() => toggle(order.entry.id, serial)}
                       >
                         {on ? "✓ " : ""}
@@ -1019,7 +1011,7 @@ function LineFields({
           }}
         >
           Type the count myself
-          <span className={cn("inline-flex h-7 w-12 items-center rounded-full p-1", draft.qtyOverride ? "bg-pine" : "bg-line")}>
+          <span className={cn("inline-flex h-7 w-12 items-center rounded-full p-1", draft.qtyOverride ? "bg-brand" : "bg-line")}>
             <span className={cn("size-5 rounded-full bg-card", draft.qtyOverride && "ml-auto")} />
           </span>
         </button>

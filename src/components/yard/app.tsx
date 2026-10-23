@@ -49,9 +49,9 @@ const BAR: NavItem[] = [
 ];
 
 const MORE: NavItem[] = [
-  { id: "analyse", label: "Analytics", icon: PieChart, hint: "Sales, payments and trends by day, week, month or year" },
-  { id: "users", label: "Users", icon: Users, hint: "Who is in the book, their roles, and the activity log" },
-  { id: "setup", label: "Settings", icon: Settings, hint: "Business details, team, gas types, backup and appearance" },
+  { id: "analyse", label: "Analytics", icon: PieChart, hint: "Sales and payments by day, month or year" },
+  { id: "users", label: "Users", icon: Users, hint: "People, roles and activity" },
+  { id: "setup", label: "Settings", icon: Settings, hint: "Business, gas types, backup, appearance" },
 ];
 
 const inMore = (view: View) => view === "more" || MORE.some((item) => item.id === view);
@@ -81,9 +81,11 @@ function Gate() {
 function BootScreen({ label }: { label: string }) {
   return (
     <main className="grid min-h-screen place-items-center bg-paper px-6 text-ink">
-      <div className="max-w-sm text-center">
-        <p className="font-display text-4xl">Cxyledge</p>
-        <p className="mt-2 text-sm text-muted">{label}</p>
+      <div className="flex flex-col items-center gap-3 text-center">
+        <span className="grid size-10 place-items-center rounded-md bg-brand text-brand-fg">
+          <Cylinder className="size-5" aria-hidden />
+        </span>
+        <p className="text-sm text-muted">{label}</p>
       </div>
     </main>
   );
@@ -99,25 +101,25 @@ function SignedOut() {
       .catch(() => {});
   }, []);
   return (
-    <main className="grid min-h-screen place-items-center bg-paper px-6 text-ink">
+    <main className="grid min-h-screen place-items-center bg-paper px-4 py-10 text-ink">
       <div className="w-full max-w-sm">
-        <div className="mb-6 flex items-center gap-3">
-          <span className="grid size-11 place-items-center rounded-lg bg-ink text-paper">
-            <Cylinder className="size-5" aria-hidden />
+        <div className="mb-5 flex items-center gap-2.5">
+          <span className="grid size-9 place-items-center rounded-md bg-brand text-brand-fg">
+            <Cylinder className="size-[1.1rem]" aria-hidden />
           </span>
-          <p className="font-display text-3xl leading-none">Cxyledge</p>
+          <p className="text-lg font-semibold">Cxyledge</p>
         </div>
-        {invitedTo ? (
-          <p className="mb-4 rounded-xl border border-line bg-card px-4 py-3 text-sm" role="status">
-            You&apos;ve been invited to join <span className="font-semibold">{invitedTo}</span>. Sign in or create an account and you&apos;ll go straight into that book.
-          </p>
-        ) : null}
-        <h1 className="font-display text-2xl">One yard book, every device</h1>
-        <p className="mt-2 text-sm text-muted">
-          Sign in to keep cylinders, payments, and bills in the cloud. A line entered on a phone updates the laptop, and the other way around.
-        </p>
-        <div className="mt-5">
-          <SignInPanel />
+        <div className="rounded-lg border border-line bg-card p-5">
+          {invitedTo ? (
+            <p className="mb-4 rounded-md bg-brand-soft px-3 py-2.5 text-sm" role="status">
+              You&apos;re invited to <span className="font-semibold">{invitedTo}</span>. Sign in and you&apos;ll go straight into that book.
+            </p>
+          ) : null}
+          <h1 className="text-lg font-semibold">Sign in or create an account</h1>
+          <p className="mt-1 text-sm text-muted">Cylinders, bills and payments for your yard.</p>
+          <div className="mt-4">
+            <SignInPanel />
+          </div>
         </div>
       </div>
     </main>
@@ -220,20 +222,21 @@ function Shell({ userId }: { userId: string }) {
     <RoleContext.Provider value={role}>
     <div className="min-h-screen bg-paper text-ink">
       <header className="no-print sticky top-0 z-20 border-b border-line bg-card">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 lg:px-6">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="grid size-11 shrink-0 place-items-center rounded-lg bg-ink text-paper">
-              <Cylinder className="size-5" aria-hidden />
+        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-3 px-4 lg:px-6">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="grid size-8 shrink-0 place-items-center rounded-md bg-brand text-brand-fg">
+              <Cylinder className="size-4" aria-hidden />
             </span>
-            <div className="min-w-0">
-              <p className="font-display text-xl leading-none">Cxyledge</p>
-              <p className="truncate text-sm text-muted">
+            <p className="flex min-w-0 items-baseline gap-2 leading-tight">
+              <span className="shrink-0 text-[0.95rem] font-semibold">Cxyledge</span>
+              <span className="truncate text-sm text-muted">
+                <span className="mr-2 text-line" aria-hidden>/</span>
                 {yard?.name ?? "Shared yard"}
-                {yard && role !== "owner" ? <span className="ml-2 rounded-full bg-sand px-2 py-0.5 text-xs font-semibold text-ink">{ROLE_LABEL[role]}</span> : null}
-              </p>
-            </div>
+              </span>
+              {yard && role !== "owner" ? <span className="shrink-0 rounded bg-sand px-1.5 py-0.5 text-[0.7rem] font-semibold text-ink">{ROLE_LABEL[role]}</span> : null}
+            </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-2">
             {yard ? (
               <GlobalSearch
                 entries={entries}
@@ -259,18 +262,14 @@ function Shell({ userId }: { userId: string }) {
                 }}
               />
             ) : null}
-            <p className="hidden text-right text-xs text-muted lg:block">
-              Cloud book
-              <span className="block">Updates on every signed-in device</span>
-            </p>
             <UserButton />
           </div>
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-6xl lg:grid-cols-[13rem_minmax(0,1fr)]">
-        <aside className="no-print hidden lg:block">
-          <nav className="sticky top-20 flex flex-col gap-1 px-3 py-4" aria-label="Sections">
+      <div className="mx-auto grid max-w-7xl lg:grid-cols-[12.5rem_minmax(0,1fr)]">
+        <aside className="no-print hidden border-r border-line lg:block">
+          <nav className="sticky top-14 flex flex-col gap-0.5 px-3 py-4" aria-label="Sections">
             {NAV.map((item) => {
               const Icon = item.icon;
               const on = view === item.id;
@@ -280,8 +279,8 @@ function Shell({ userId }: { userId: string }) {
                   type="button"
                   aria-current={on ? "page" : undefined}
                   className={cn(
-                    "flex h-11 items-center gap-2 rounded-lg px-3 text-left text-sm",
-                    on ? "bg-sand font-semibold text-ink" : "text-muted hover:bg-sand",
+                    "flex h-9 items-center gap-2.5 rounded-md px-2.5 text-left text-sm",
+                    on ? "bg-brand-soft font-semibold text-brand" : "text-muted hover:bg-sand hover:text-ink",
                   )}
                   onClick={() => {
                     setFocusCompany(null);
@@ -298,9 +297,9 @@ function Shell({ userId }: { userId: string }) {
             })}
           </nav>
         </aside>
-        <main className="min-w-0 px-4 py-5 pb-44 lg:px-8 lg:pb-28">
+        <main className="min-w-0 px-4 py-4 pb-40 lg:px-8 lg:py-6 lg:pb-24">
           {!online ? (
-            <p className="mb-4 rounded-xl border border-line bg-sand px-4 py-3 text-sm" role="status">
+            <p className="mb-4 rounded-lg border border-line bg-sand px-3.5 py-2.5 text-sm" role="status">
               <span className="font-semibold">No internet.</span> You&apos;re seeing the book as it was last loaded on this device. New changes can&apos;t be saved until you&apos;re back online.
             </p>
           ) : null}
@@ -360,21 +359,19 @@ function Shell({ userId }: { userId: string }) {
           {!loading && yard && view === "setup" ? <SettingsHome yard={yard} entries={entries} payments={payments} onChanged={refresh} /> : null}
           {!loading && yard && view === "more" ? (
             <div className="flex flex-col gap-4">
-              <h2 className="font-display text-3xl">More</h2>
-              <ul className="overflow-hidden rounded-xl border border-line bg-card">
+              <h2 className="text-xl font-semibold sm:text-2xl">More</h2>
+              <ul className="-mx-4 overflow-hidden border-y border-line bg-card sm:mx-0 sm:rounded-lg sm:border">
                 {MORE.map((item) => {
                   const Icon = item.icon;
                   const dot = item.id === "setup" && role === "owner" && backupDue(yard) && entries.length > 0;
                   return (
                     <li key={item.id} className="border-b border-line last:border-b-0">
-                      <button type="button" className="flex w-full items-center gap-3 px-4 py-4 text-left hover:bg-sand" onClick={() => setView(item.id)}>
-                        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-sand text-ink">
-                          <Icon className="size-5" aria-hidden />
-                        </span>
+                      <button type="button" className="flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-sand" onClick={() => setView(item.id)}>
+                        <Icon className="size-5 shrink-0 text-muted" aria-hidden />
                         <span className="min-w-0 flex-1">
                           <span className="flex items-center gap-2 font-semibold">
                             {item.label}
-                            {dot ? <span className="rounded-full bg-rust px-2 py-0.5 text-[0.7rem] font-semibold text-rust-fg">Backup due</span> : null}
+                            {dot ? <span className="rounded bg-rust/10 px-1.5 py-0.5 text-[0.7rem] font-semibold text-rust">Backup due</span> : null}
                           </span>
                           <span className="block text-xs text-muted">{item.hint}</span>
                         </span>
@@ -408,7 +405,7 @@ function Shell({ userId }: { userId: string }) {
         />
       ) : null}
 
-      <nav className="no-print fixed inset-x-0 bottom-0 z-30 border-t border-line bg-card lg:hidden" aria-label="Sections">
+      <nav className="no-print fixed inset-x-0 bottom-0 z-30 border-t border-line bg-card pb-[env(safe-area-inset-bottom)] lg:hidden" aria-label="Sections">
         <div className="mx-auto flex max-w-lg">
           {BAR.map((item) => {
             const Icon = item.icon;
@@ -420,8 +417,8 @@ function Shell({ userId }: { userId: string }) {
                 type="button"
                 aria-current={on ? "page" : undefined}
                 className={cn(
-                  "relative flex min-h-16 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-xs",
-                  on ? "font-semibold text-rust" : "text-muted",
+                  "relative flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[0.7rem]",
+                  on ? "font-semibold text-brand before:absolute before:inset-x-5 before:top-0 before:h-0.5 before:rounded-b before:bg-brand" : "text-muted",
                 )}
                 onClick={() => {
                   setFocusCompany(null);

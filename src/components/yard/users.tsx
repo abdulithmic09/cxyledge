@@ -5,7 +5,7 @@ import { ROLE_HELP, useRole } from "@/lib/inventory/role";
 import { toCsv } from "@/lib/inventory/files";
 import { cn } from "@/lib/cn";
 import { ExportBar } from "@/components/yard/export-bar";
-import { Panel, Stat } from "@/components/yard/ui";
+import { PageHead, Panel, Tally } from "@/components/yard/ui";
 
 const ACTIVE_MS = 5 * 60 * 1000;
 
@@ -99,16 +99,15 @@ export function UsersView({ yardName }: { yardName: string }) {
   );
 
   return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <h2 className="font-display text-3xl">Users</h2>
-        <p className="mt-1 text-sm text-muted">Everyone in {yardName}, when they last used it, and every change they made.</p>
-      </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <Stat label="People in this book" value={people.length} />
-        <Stat label="Active now" value={activeNow} tone="pine" />
-        <Stat label="Changes logged" value={log.length} tone="rust" />
-      </div>
+    <div className="flex flex-col gap-3">
+      <PageHead title="Users" detail={yardName} />
+      <Tally
+        items={[
+          { label: "People", value: people.length },
+          { label: "Active now", value: activeNow, tone: activeNow ? "pine" : undefined },
+          { label: "Changes logged", value: log.length },
+        ]}
+      />
 
       {members.isPending ? <p className="text-sm text-muted">Loading people…</p> : null}
       {members.isError ? <p className="text-sm text-rust">Couldn&apos;t load the people in this book. Pull to refresh or try again shortly.</p> : null}

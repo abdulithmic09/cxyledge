@@ -303,7 +303,7 @@ function ReceiptCard({ yard, payment, balanceAfter }: { yard: YardInfo; payment:
         <div className="px-4 py-4">
           <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-rust">{received ? "Received from" : "Paid to"}</p>
           <p className="mt-1 text-base font-bold">{payment.companyName}</p>
-          <div className={cn("mt-3 rounded-lg border-l-4 bg-[#f3efe6] px-4 py-3", received ? "border-pine" : "border-rust")}>
+          <div className={cn("mt-3 rounded-lg border-l-4 bg-sand px-4 py-3", received ? "border-pine" : "border-rust")}>
             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-rust">{received ? "Amount received" : "Amount paid"}</p>
             <p className="mt-1 text-2xl font-bold tabular-nums">{rupee(payment.amount)}</p>
             <p className="text-xs text-[#5e574d]">{rupeesInWords(payment.amount)}</p>

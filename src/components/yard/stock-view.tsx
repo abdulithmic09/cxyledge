@@ -12,7 +12,7 @@ import { todayISO } from "@/lib/inventory/model";
 import { useRole } from "@/lib/inventory/role";
 import { cn } from "@/lib/cn";
 import { TypePicker } from "@/components/yard/type-picker";
-import { Field, Panel } from "@/components/yard/ui";
+import { Field, PageHead, Panel, Tally } from "@/components/yard/ui";
 import { takeCylinderRequest } from "@/lib/inventory/nav-requests";
 
 type Note = { tone: "ok" | "bad"; text: string } | null;
@@ -68,25 +68,16 @@ export function StockView({ yard, entries, payments, onChanged }: { yard: YardIn
   const totals = rows.reduce((sum, row) => ({ full: sum.full + row.full, empty: sum.empty + row.empty, plant: sum.plant + row.plant, customers: sum.customers + row.customers }), { full: 0, empty: 0, plant: 0, customers: 0 });
 
   return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <h2 className="font-display text-3xl">Stock</h2>
-        <p className="mt-1 text-sm text-muted">Full and empty cylinders at the yard, cylinders at the refilling plant, any cylinder&apos;s history, and holding charges.</p>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {[
-          ["Full at yard", totals.full, "text-pine"],
-          ["Empty at yard", totals.empty, "text-ink"],
-          ["At the plant", totals.plant, "text-ink"],
-          ["With customers", totals.customers, "text-rust"],
-        ].map(([label, value, tone]) => (
-          <div key={label as string} className="rounded-xl border border-line bg-card p-4">
-            <p className="text-sm text-muted">{label}</p>
-            <p className={cn("mt-1 font-display text-3xl tabular-nums", tone as string)}>{value as number}</p>
-          </div>
-        ))}
-      </div>
+    <div className="flex flex-col gap-3">
+      <PageHead title="Stock" detail="Cylinders at the yard, the plant and with customers" />
+      <Tally
+        items={[
+          { label: "Full at yard", value: totals.full, tone: totals.full < 0 ? "rust" : undefined },
+          { label: "Empty at yard", value: totals.empty, tone: totals.empty < 0 ? "rust" : undefined },
+          { label: "At the plant", value: totals.plant },
+          { label: "With customers", value: totals.customers },
+        ]}
+      />
 
       {counting ? (
         <CountWizard
@@ -103,9 +94,9 @@ export function StockView({ yard, entries, payments, onChanged }: { yard: YardIn
       )}
 
       <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0" role="tablist" aria-label="Stock tasks">
-        <div className="flex w-max gap-1 rounded-xl border border-line bg-card p-1">
+        <div className="tabs">
           {STOCK_TABS.map((item) => (
-            <button key={item.id} type="button" role="tab" aria-selected={tab === item.id} className={cn("btn h-9 shrink-0 px-3 text-sm", tab === item.id ? "btn-pine" : "")} onClick={() => setTab(item.id)}>
+            <button key={item.id} type="button" role="tab" aria-selected={tab === item.id} onClick={() => setTab(item.id)}>
               {item.label}
             </button>
           ))}
@@ -133,15 +124,13 @@ function StockTable({ rows: all, onCount }: { rows: ReturnType<typeof yardStock>
   return (
     <Panel title="By gas type">
       {uncounted ? (
-        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg bg-sand px-3 py-3 text-sm">
+        <div className="mb-3 flex flex-col gap-2 rounded-md border border-line bg-sand px-3 py-2.5 text-sm sm:flex-row sm:items-center">
           <p className="min-w-0 flex-1">
-            {all.some((row) => row.full < 0 || row.empty < 0)
-              ? "Some numbers are below zero because the yard hasn't been counted yet. "
-              : ""}
-            Count what is in the yard once, and bills, returns and plant trips keep it right after that.
+            {all.some((row) => row.full < 0 || row.empty < 0) ? "Numbers below zero mean the yard hasn't been counted yet. " : ""}
+            Count it once; after that the book keeps it right.
           </p>
           {canEdit ? (
-            <button type="button" className="btn btn-pine gap-2" onClick={onCount}>
+            <button type="button" className="btn btn-pine h-9 min-h-0 w-fit gap-1.5 px-3 text-sm" onClick={onCount}>
               <ClipboardCheck className="size-4" aria-hidden /> Start stock count
             </button>
           ) : null}
@@ -168,7 +157,7 @@ function StockTable({ rows: all, onCount }: { rows: ReturnType<typeof yardStock>
                     <span className="font-medium">{row.type}</span>
                     <span className="block text-xs text-muted">{row.countedOn ? `Counted ${dmy(row.countedOn)}` : "Not counted yet"}</span>
                   </td>
-                  <td className={cn("px-1 py-2 text-right tabular-nums", row.full < 0 ? "font-semibold text-rust" : "text-pine")}>{row.full}</td>
+                  <td className={cn("px-1 py-2 text-right tabular-nums", row.full < 0 && "font-semibold text-rust")}>{row.full}</td>
                   <td className={cn("px-1 py-2 text-right tabular-nums", row.empty < 0 && "font-semibold text-rust")}>{row.empty}</td>
                   <td className="px-1 py-2 text-right tabular-nums">{row.plant}</td>
                   <td className="px-1 py-2 text-right tabular-nums">{row.customers}</td>
@@ -184,7 +173,7 @@ function StockTable({ rows: all, onCount }: { rows: ReturnType<typeof yardStock>
           {showAll ? "Show only gas types in use" : `Show all ${all.length} gas types`}
         </button>
       ) : null}
-      {rows.some((row) => row.full < 0 || row.empty < 0) ? <p className="mt-2 text-xs text-rust">A number below zero means more went out than was counted in. Do a fresh count for that gas type.</p> : null}
+      {rows.some((row) => row.full < 0 || row.empty < 0) ? <p className="mt-2 text-xs text-rust">Below zero: more went out than was counted in. Count that gas again.</p> : null}
     </Panel>
   );
 }
@@ -370,7 +359,7 @@ function FindCylinder({ entries, moves }: { entries: Entry[]; moves: StockMove[]
       {status ? (
         <div className="mt-4 grid gap-4 sm:grid-cols-[16rem_1fr]">
           <div className={cn("rounded-xl p-4", status.where === "customer" ? "bg-rust/10" : status.where === "plant" ? "bg-sand" : "bg-pine/10")}>
-            <p className="font-display text-2xl">{status.serial}</p>
+            <p className="text-lg font-semibold">{status.serial}</p>
             <p className="text-sm text-muted">{status.type}</p>
             <p className="mt-3 text-sm font-semibold">{WHERE_LABEL[status.where]}</p>
             {status.where === "customer" || status.where === "plant" ? <p className="text-sm">{status.party}</p> : null}
@@ -692,7 +681,7 @@ function CountWizard({ rows, types, onClose, onSaved }: { rows: ReturnType<typeo
       {!done && type ? (
         <div className="grid gap-4">
           <div>
-            <p className="font-display text-2xl">{type}</p>
+            <p className="text-lg font-semibold">{type}</p>
             <p className="text-sm text-muted">Count the cylinders standing in your yard right now. Leave a box empty if there are none.</p>
           </div>
           <div className="grid grid-cols-2 gap-3">

@@ -100,37 +100,42 @@ export function UserButton() {
   );
   if (!user) return null;
   const label = user.displayName ?? user.primaryEmail ?? "Account";
+  const avatar = user.profileImageUrl ? (
+    <img src={user.profileImageUrl} alt="" className="size-8 rounded-full object-cover" />
+  ) : (
+    <span className="grid size-8 place-items-center rounded-full bg-sand text-sm font-semibold text-ink">{label.charAt(0).toUpperCase()}</span>
+  );
   return (
-    <div className="flex items-center gap-2">
-      {user.profileImageUrl ? (
-        <img
-          src={user.profileImageUrl}
-          alt=""
-          className="h-8 w-8 rounded-full object-cover"
-        />
-      ) : (
-        <span className="grid h-8 w-8 place-items-center rounded-full bg-black/10 text-sm font-medium dark:bg-white/20">
-          {label.charAt(0).toUpperCase()}
-        </span>
-      )}
-      <span className="text-sm font-medium">{label}</span>
-      {authEnabled && !gateSession && (
-        <button
-          type="button"
-          disabled={signingOut}
-          onClick={() => {
-            setSigningOut(true);
-            // Forget the offline copy of the book on this device, then sign out.
-            // Success navigates away; on failure re-enable so it can be retried.
-            void clearOfflineData()
-              .then(() => signOut())
-              .catch(() => setSigningOut(false));
-          }}
-          className="cursor-pointer text-sm underline-offset-4 opacity-70 hover:underline disabled:cursor-wait disabled:no-underline"
-        >
-          {signingOut ? "Signing out…" : "Sign out"}
-        </button>
-      )}
-    </div>
+    <details className="relative" onBlur={(event) => {
+      const box = event.currentTarget;
+      if (!box.contains(event.relatedTarget as Node | null)) box.open = false;
+    }}>
+      <summary className="flex list-none items-center rounded-full outline-offset-2 [&::-webkit-details-marker]:hidden" aria-label={`Account: ${label}`}>
+        {avatar}
+      </summary>
+      <div className="absolute right-0 top-10 z-40 w-60 rounded-lg border border-line bg-card p-1.5 shadow-lg shadow-black/10">
+        <div className="px-2.5 py-2">
+          <p className="truncate text-sm font-semibold">{user.displayName ?? "Signed in"}</p>
+          {user.primaryEmail ? <p className="truncate text-xs text-muted">{user.primaryEmail}</p> : null}
+        </div>
+        {authEnabled && !gateSession ? (
+          <button
+            type="button"
+            disabled={signingOut}
+            onClick={() => {
+              setSigningOut(true);
+              // Forget the offline copy of the book on this device, then sign out.
+              // Success navigates away; on failure re-enable so it can be retried.
+              void clearOfflineData()
+                .then(() => signOut())
+                .catch(() => setSigningOut(false));
+            }}
+            className="flex h-10 w-full items-center rounded-md px-2.5 text-left text-sm hover:bg-sand disabled:cursor-wait"
+          >
+            {signingOut ? "Signing out…" : "Sign out"}
+          </button>
+        ) : null}
+      </div>
+    </details>
   );
 }

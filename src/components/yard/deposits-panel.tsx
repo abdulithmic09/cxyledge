@@ -78,7 +78,7 @@ export function DepositsPanel({ yard, company }: { yard: YardInfo; company: stri
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <p className="text-sm text-muted">Money held against cylinders. It is not part of what {company} owes on bills.</p>
         <p className="text-right">
-          <span className="block font-display text-2xl tabular-nums">{rupee(balance.held)}</span>
+          <span className="block text-xl font-semibold tabular-nums">{rupee(balance.held)}</span>
           <span className="text-xs text-muted">held{balance.cylinders ? ` for ${balance.cylinders} cylinders` : ""}</span>
         </p>
       </div>

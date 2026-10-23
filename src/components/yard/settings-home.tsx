@@ -9,7 +9,7 @@ import { TypesPanel } from "@/components/yard/types-panel";
 import { applyLook, DEFAULT_LOOK, NO_COLORS, readLook, writeLook, type Look, type LookAccent, type LookColors, type LookMode, type LookSize } from "@/lib/inventory/look";
 import { cn } from "@/lib/cn";
 import { YardPanel } from "@/components/yard/yard-panel";
-import { Field, Panel } from "@/components/yard/ui";
+import { Field, PageHead, Panel } from "@/components/yard/ui";
 
 const MODES: Array<{ id: LookMode; label: string }> = [
   { id: "light", label: "Light" },
@@ -69,14 +69,11 @@ export function SettingsHome({ yard, entries, payments, onChanged }: { yard: Yar
 
   if (current) {
     return (
-      <div className="flex flex-col gap-4">
-        <button type="button" className="-ml-2 flex w-fit items-center gap-1 rounded-lg px-2 py-1 text-sm font-semibold text-muted hover:bg-sand" onClick={() => setSection(null)}>
+      <div className="flex flex-col gap-3">
+        <button type="button" className="-ml-2 -mb-1 flex w-fit items-center gap-1 rounded-md px-2 py-1 text-sm text-muted hover:bg-sand hover:text-ink" onClick={() => setSection(null)}>
           <ChevronLeft className="size-4" aria-hidden /> Settings
         </button>
-        <div>
-          <h2 className="font-display text-3xl">{current.title}</h2>
-          <p className="mt-1 text-sm text-muted">{current.hint}.</p>
-        </div>
+        <PageHead title={current.title} />
         {section === "business" ? (
           <>
             <Panel title="Letterhead">
@@ -158,26 +155,35 @@ export function SettingsHome({ yard, entries, payments, onChanged }: { yard: Yar
             <InstallPanel />
             <Panel title="Appearance">
               <p className="mb-3 text-sm text-muted">Theme, colours, and type size stay on this device.</p>
-              <div className="grid grid-cols-3 gap-2">
-                {MODES.map((item) => (
-                  <button key={item.id} type="button" className={cn("btn", look.mode === item.id ? "btn-pine" : "btn-ghost")} onClick={() => updateLook({ mode: item.id })}>
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                {(["rust", "pine"] as LookAccent[]).map((accent) => (
-                  <button key={accent} type="button" className={cn("btn", look.accent === accent ? "btn-pine" : "btn-ghost")} onClick={() => updateLook({ accent })}>
-                    {accent === "rust" ? "Rust accent" : "Pine accent"}
-                  </button>
-                ))}
+              <div className="grid gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-sm font-medium">Theme</span>
+                  <div className="seg" role="group" aria-label="Theme">
+                    {MODES.map((item) => (
+                      <button key={item.id} type="button" aria-pressed={look.mode === item.id} onClick={() => updateLook({ mode: item.id })}>
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-sm font-medium">Colour</span>
+                  <div className="seg" role="group" aria-label="Colour">
+                    {(["rust", "pine"] as LookAccent[]).map((accent) => (
+                      <button key={accent} type="button" aria-pressed={look.accent === accent} onClick={() => updateLook({ accent })}>
+                        <span className={cn("mr-1.5 inline-block size-2.5 rounded-full align-middle", accent === "rust" ? "bg-[#1f4a8c]" : "bg-[#1d5c45]")} aria-hidden />
+                        {accent === "rust" ? "Blue" : "Green"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
                 {(
                   [
-                    ["background", "Background colour", "#f3efe6"],
-                    ["text", "Text colour", "#1c1915"],
-                    ["accent", "Accent colour", "#8f3d16"],
+                    ["background", "Background colour", "#f2f3f5"],
+                    ["text", "Text colour", "#16191d"],
+                    ["accent", "Accent colour", "#1f4a8c"],
                   ] as Array<[keyof LookColors, string, string]>
                 ).map(([key, label, fallback]) => (
                   <label key={key} className="flex items-center justify-between gap-3 rounded-lg border border-line px-3 py-2 text-sm">
@@ -200,12 +206,15 @@ export function SettingsHome({ yard, entries, payments, onChanged }: { yard: Yar
                   Reset custom colours
                 </button>
               </div>
-              <div className="mt-3 grid grid-cols-3 gap-2">
-                {SIZES.map((item) => (
-                  <button key={item.id} type="button" className={cn("btn", look.size === item.id ? "btn-pine" : "btn-ghost")} onClick={() => updateLook({ size: item.id })}>
-                    {item.label}
-                  </button>
-                ))}
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-sm font-medium">Text size</span>
+                <div className="seg" role="group" aria-label="Text size">
+                  {SIZES.map((item) => (
+                    <button key={item.id} type="button" aria-pressed={look.size === item.id} onClick={() => updateLook({ size: item.id })}>
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </Panel>
           </>
@@ -215,27 +224,20 @@ export function SettingsHome({ yard, entries, payments, onChanged }: { yard: Yar
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <h2 className="font-display text-3xl">Settings</h2>
-        <p className="mt-1 text-sm text-muted">
-          Active book <span className="font-semibold text-ink">{yard.name}</span>.
-        </p>
-      </div>
-      <ul className="overflow-hidden rounded-xl border border-line bg-card">
+    <div className="flex flex-col gap-3">
+      <PageHead title="Settings" detail={yard.name} />
+      <ul className="-mx-4 overflow-hidden border-y border-line bg-card sm:mx-0 sm:rounded-lg sm:border">
         {SECTIONS.map((item) => {
           const Icon = item.icon;
           const dot = item.id === "backup" && due;
           return (
             <li key={item.id} className="border-b border-line last:border-b-0">
-              <button type="button" className="flex w-full items-center gap-3 px-4 py-4 text-left hover:bg-sand" onClick={() => setSection(item.id)}>
-                <span className="grid size-10 shrink-0 place-items-center rounded-full bg-sand text-ink">
-                  <Icon className="size-5" aria-hidden />
-                </span>
+              <button type="button" className="flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-sand" onClick={() => setSection(item.id)}>
+                <Icon className="size-5 shrink-0 text-muted" aria-hidden />
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-2 font-semibold">
                     {item.title}
-                    {dot ? <span className="rounded-full bg-rust px-2 py-0.5 text-[0.7rem] font-semibold text-rust-fg">Backup due</span> : null}
+                    {dot ? <span className="rounded bg-rust/10 px-1.5 py-0.5 text-[0.7rem] font-semibold text-rust">Backup due</span> : null}
                   </span>
                   <span className="block text-xs text-muted">{item.hint}</span>
                 </span>

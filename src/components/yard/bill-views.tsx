@@ -309,7 +309,7 @@ export function BillPreview({ bill }: { bill: BillData }) {
           ))}
           {!yard.address && !ids.length ? <p className="text-xs text-[#5e574d]">Add your letterhead in Settings.</p> : null}
         </div>
-        <div className="min-w-0 self-start rounded-lg bg-[#f3efe6] p-3">
+        <div className="min-w-0 self-start rounded-lg bg-sand p-3">
           <p className={label}>{sale ? "Bill to" : "Supplier"}</p>
           <p className="mt-1 break-words text-base font-bold">{bill.company}</p>
           {bill.companyPhone ? <p className="text-[#5e574d]">Phone {bill.companyPhone}</p> : null}

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
+/** One figure in a tally strip or a small summary box. */
 export function Stat({
   label,
   value,
@@ -11,17 +12,46 @@ export function Stat({
   tone?: "pine" | "rust";
 }) {
   return (
-    <div className="rounded-xl border border-line bg-card px-4 py-3">
-      <p className="text-sm text-muted">{label}</p>
+    <div className="rounded-lg border border-line bg-card px-3.5 py-2.5">
+      <p className="label">{label}</p>
       <p
         className={cn(
-          "mt-1 text-3xl font-semibold tabular-nums tracking-tight",
+          "mt-0.5 text-xl font-semibold tabular-nums",
           tone === "pine" && "text-pine",
           tone === "rust" && "text-rust",
         )}
       >
         {value}
       </p>
+    </div>
+  );
+}
+
+const COLS: Record<number, string> = { 1: "grid-cols-1", 2: "grid-cols-2", 3: "grid-cols-3", 4: "grid-cols-2 sm:grid-cols-4" };
+
+/** Figures in one ruled row, edge to edge on a phone. */
+export function Tally({ items, className }: { items: Array<{ label: string; value: ReactNode; tone?: "pine" | "rust" }>; className?: string }) {
+  return (
+    <div className={cn("tally -mx-4 sm:mx-0 sm:rounded-lg sm:border", COLS[items.length] ?? "grid-cols-2", className)}>
+      {items.map((item) => (
+        <div key={item.label}>
+          <p className="label truncate">{item.label}</p>
+          <p className={cn("mt-0.5 truncate text-lg font-semibold tabular-nums", item.tone === "pine" && "text-pine", item.tone === "rust" && "text-rust")}>{item.value}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Page title with an optional line of detail and actions on the right. */
+export function PageHead({ title, detail, action }: { title: string; detail?: ReactNode; action?: ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-2">
+      <div className="min-w-0">
+        <h2 className="text-xl font-semibold leading-tight sm:text-2xl">{title}</h2>
+        {detail ? <p className="mt-0.5 text-sm text-muted">{detail}</p> : null}
+      </div>
+      {action ? <div className="flex shrink-0 gap-2">{action}</div> : null}
     </div>
   );
 }
@@ -37,7 +67,7 @@ export function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-sm font-medium">{label}</span>
+      <span className="mb-1 block text-sm font-medium">{label}</span>
       {children}
       {hint ? <span className="mt-1 block text-xs text-muted">{hint}</span> : null}
     </label>
@@ -56,10 +86,10 @@ export function Panel({
   className?: string;
 }) {
   return (
-    <section className={cn("rounded-xl border border-line bg-card p-4 sm:p-5", className)}>
+    <section className={cn("rounded-lg border border-line bg-card p-4", className)}>
       {title ? (
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <h2 className="font-display text-2xl leading-tight">{title}</h2>
+        <div className="mb-3 flex items-center justify-between gap-3 border-b border-line pb-2.5">
+          <h2 className="text-base font-semibold leading-tight">{title}</h2>
           {action}
         </div>
       ) : null}
@@ -70,9 +100,9 @@ export function Panel({
 
 export function EmptyNote({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="rounded-xl border border-dashed border-line bg-card px-5 py-8 text-center">
-      <h2 className="font-display text-2xl">{title}</h2>
-      <div className="mx-auto mt-2 max-w-md text-sm text-muted">{children}</div>
+    <div className="rounded-lg border border-dashed border-line bg-card px-5 py-8 text-center">
+      <h2 className="text-base font-semibold">{title}</h2>
+      <div className="mx-auto mt-1.5 max-w-md text-sm text-muted">{children}</div>
     </div>
   );
 }

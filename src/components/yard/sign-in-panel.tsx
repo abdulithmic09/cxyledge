@@ -95,7 +95,7 @@ export function SignInPanel() {
       ) : null}
       {SOCIAL_SIGNIN || direct.google || direct.apple ? (
         <p className="py-1 text-center text-xs text-muted">
-          or use email. Sign in with the same email on any device to see the same book.
+          or use email
         </p>
       ) : null}
       <form className="flex flex-col gap-2" onSubmit={onEmail}>
@@ -139,7 +139,7 @@ export function SignInPanel() {
       </form>
       <button
         type="button"
-        className="text-sm font-semibold text-rust"
+        className="text-sm font-medium text-brand"
         onClick={() => {
           setMode(mode === "up" ? "in" : "up");
           setError("");

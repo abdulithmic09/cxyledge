@@ -43,7 +43,7 @@ export function OverduePanel({ entries, payments, yardName }: { entries: Entry[]
           Bills are due {book} day{book === 1 ? "" : "s"} after the bill date. {late.length ? `${late.length} compan${late.length === 1 ? "y is" : "ies are"} late.` : "Nobody is late right now."}
         </p>
         <p className="text-right">
-          <span className={cn("block font-display text-2xl tabular-nums", late.length ? "text-rust" : "text-pine")}>{rupee(late.reduce((sum, row) => sum + row.overdue, 0), 0)}</span>
+          <span className={cn("block text-xl font-semibold tabular-nums", late.length ? "text-rust" : "text-pine")}>{rupee(late.reduce((sum, row) => sum + row.overdue, 0), 0)}</span>
           <span className="text-xs text-muted">past due</span>
         </p>
       </div>

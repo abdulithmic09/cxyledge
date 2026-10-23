@@ -17,7 +17,7 @@ import { rupee } from "@/lib/inventory/serials";
 import { toCsv } from "@/lib/inventory/files";
 import { cn } from "@/lib/cn";
 import { ExportBar } from "@/components/yard/export-bar";
-import { Panel, Stat } from "@/components/yard/ui";
+import { Panel, Tally } from "@/components/yard/ui";
 
 const PERIODS: Array<{ id: Period; label: string }> = [
   { id: "day", label: "Day" },
@@ -96,17 +96,17 @@ export default function AnalyticsView({ entries, payments = [], yardName }: { en
   if (entries.length === 0) {
     return (
       <Panel title="Nothing to analyse yet">
-        <p className="text-sm text-muted">Add deliveries in the book, or load the sample week. Day, week, month, and year totals show up here.</p>
+        <p className="text-sm text-muted">Totals by day, week, month and year appear once there are entries in the book.</p>
       </Panel>
     );
   }
 
   const filtered = company !== "all" || status !== "all";
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="font-display text-3xl">Analytics</h2>
+          <h2 className="text-xl font-semibold sm:text-2xl">Analytics</h2>
           <p className="mt-1 text-sm text-muted">
             {bounds.label}
             {company !== "all" ? ` · ${company}` : ""}
@@ -114,19 +114,19 @@ export default function AnalyticsView({ entries, payments = [], yardName }: { en
           </p>
         </div>
         <div className="flex gap-2">
-          <button type="button" className={cn("btn h-10 gap-2 px-3 text-sm", showFilters || filtered ? "btn-pine" : "btn-ghost")} aria-expanded={showFilters} onClick={() => setShowFilters((value) => !value)}>
+          <button type="button" className={cn("btn h-9 min-h-0 gap-1.5 px-3 text-sm", showFilters || filtered ? "btn-pine" : "btn-ghost")} aria-expanded={showFilters} onClick={() => setShowFilters((value) => !value)}>
             <SlidersHorizontal className="size-4" aria-hidden /> Filters{filtered ? " on" : ""}
           </button>
-          <button type="button" className={cn("btn h-10 gap-2 px-3 text-sm", showExport ? "btn-pine" : "btn-ghost")} aria-expanded={showExport} onClick={() => setShowExport((value) => !value)}>
+          <button type="button" className={cn("btn h-9 min-h-0 gap-1.5 px-3 text-sm", showExport ? "btn-pine" : "btn-ghost")} aria-expanded={showExport} onClick={() => setShowExport((value) => !value)}>
             <Download className="size-4" aria-hidden /> Export
           </button>
         </div>
       </div>
 
       <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-        <div className="flex w-max gap-1 rounded-xl border border-line bg-card p-1">
+        <div className="seg">
           {PERIODS.map((item) => (
-            <button key={item.id} type="button" className={cn("btn h-9 shrink-0 px-4 text-sm", period === item.id ? "btn-pine" : "")} onClick={() => setPeriod(item.id)}>
+            <button key={item.id} type="button" aria-pressed={period === item.id} onClick={() => setPeriod(item.id)}>
               {item.label}
             </button>
           ))}
@@ -173,24 +173,19 @@ export default function AnalyticsView({ entries, payments = [], yardName }: { en
         </div>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-3">
-        <Stat label="Received" value={rupee(totals.paid, 0)} tone="pine" />
-        <Stat label="To collect" value={rupee(totals.toCollect, 0)} tone="rust" />
-      </div>
-      <div className="grid grid-cols-3 gap-2 rounded-xl border border-line bg-card px-3 py-3 text-center text-sm">
-        <p>
-          <span className="block font-display text-2xl tabular-nums text-rust">{totals.delivered}</span>
-          <span className="text-xs text-muted">given</span>
-        </p>
-        <p>
-          <span className="block font-display text-2xl tabular-nums text-pine">{totals.returned}</span>
-          <span className="text-xs text-muted">returned</span>
-        </p>
-        <p>
-          <span className="block font-display text-2xl tabular-nums">{totals.purchased}</span>
-          <span className="text-xs text-muted">bought</span>
-        </p>
-      </div>
+      <Tally
+        items={[
+          { label: "Received", value: rupee(totals.paid, 0), tone: "pine" },
+          { label: "To collect", value: rupee(totals.toCollect, 0), tone: totals.toCollect > 0 ? "rust" : undefined },
+        ]}
+      />
+      <Tally
+        items={[
+          { label: "Given", value: totals.delivered },
+          { label: "Returned", value: totals.returned },
+          { label: "Bought", value: totals.purchased },
+        ]}
+      />
       <p className="text-sm leading-relaxed text-muted">
         {busiest && busiest.delivered > 0 ? `Busiest: ${busiest.label}, ${busiest.delivered} given. ` : ""}
         {leaders[0] ? `${leaders[0].company} owes the most at ${rupee(leaders[0].balance, 0)}. ` : ""}
@@ -199,7 +194,7 @@ export default function AnalyticsView({ entries, payments = [], yardName }: { en
       </p>
 
       <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0" role="tablist" aria-label="Analytics views">
-        <div className="flex w-max gap-1 rounded-xl border border-line bg-card p-1">
+        <div className="tabs">
           {(
             [
               ["cylinders", "Cylinders"],
@@ -207,7 +202,7 @@ export default function AnalyticsView({ entries, payments = [], yardName }: { en
               ["lines", `Lines (${scoped.length})`],
             ] as const
           ).map(([id, label]) => (
-            <button key={id} type="button" role="tab" aria-selected={tab === id} className={cn("btn h-9 shrink-0 px-3 text-sm", tab === id ? "btn-pine" : "")} onClick={() => setTab(id)}>
+            <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>
               {label}
             </button>
           ))}
@@ -215,7 +210,15 @@ export default function AnalyticsView({ entries, payments = [], yardName }: { en
       </div>
 
       {tab === "cylinders" ? (
-        <Panel title="Given and returned">
+        <Panel
+          title="Given and returned"
+          action={
+            <span className="flex items-center gap-3 text-xs text-muted">
+              <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-brand" aria-hidden />Given</span>
+              <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-muted" aria-hidden />Returned</span>
+            </span>
+          }
+        >
           <div className="h-60 w-full min-w-0">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={series} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
@@ -223,8 +226,8 @@ export default function AnalyticsView({ entries, payments = [], yardName }: { en
                 <XAxis dataKey="label" tick={{ fill: "var(--color-muted)", fontSize: 12 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
                 <YAxis tick={{ fill: "var(--color-muted)", fontSize: 12 }} axisLine={false} tickLine={false} width={32} allowDecimals={false} />
                 <Tooltip cursor={{ fill: "var(--color-sand)" }} content={<ChartTip />} />
-                <Bar dataKey="delivered" fill="var(--color-rust)" radius={[4, 4, 0, 0]} maxBarSize={18} />
-                <Bar dataKey="returned" fill="var(--color-pine)" radius={[4, 4, 0, 0]} maxBarSize={18} />
+                <Bar dataKey="delivered" name="Given" fill="var(--color-brand)" radius={[2, 2, 0, 0]} maxBarSize={18} />
+                <Bar dataKey="returned" name="Returned" fill="var(--color-muted)" radius={[2, 2, 0, 0]} maxBarSize={18} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -236,7 +239,7 @@ export default function AnalyticsView({ entries, payments = [], yardName }: { en
                 <XAxis dataKey="label" tick={{ fill: "var(--color-muted)", fontSize: 12 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
                 <YAxis tick={{ fill: "var(--color-muted)", fontSize: 12 }} axisLine={false} tickLine={false} width={32} allowDecimals={false} />
                 <Tooltip content={<ChartTip />} />
-                <Line type="monotone" dataKey="outstanding" stroke="var(--color-ink)" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="outstanding" name="Out" stroke="var(--color-brand)" strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -300,7 +303,7 @@ function ChartTip({
       <p className="font-medium">{label}</p>
       {payload.map((item) => (
         <p key={String(item.dataKey)} className="tabular-nums text-muted">
-          {item.dataKey} {item.value}
+          {item.name ?? item.dataKey} {item.value}
         </p>
       ))}
     </div>

@@ -1,22 +1,31 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Fraunces", Georgia, "Times New Roman", serif;
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
-  --color-paper: #f3efe6;
-  --color-card: #fffdf8;
-  --color-ink: #1c1915;
-  --color-muted: #5e574e;
-  --color-line: #ddd4c4;
-  --color-sand: #ebe4d6;
-  --color-rust: #8f3d16;
-  --color-rust-fg: #fff7f2;
-  --color-pine: #1e4d3c;
-  --color-pine-fg: #f3faf6;
+  /* Surfaces: a cool grey page with white sheets, like a register on a desk. */
+  --color-paper: #f2f3f5;
+  --color-card: #ffffff;
+  --color-sand: #f0f2f4;
+  --color-line: #e1e4e8;
+  --color-ink: #16191d;
+  --color-muted: #5d6570;
 
-  --radius-lg: 0.75rem;
-  --radius-xl: 1rem;
+  /* One brand colour for actions and the current selection. */
+  --color-brand: #1f4a8c;
+  --color-brand-fg: #ffffff;
+  --color-brand-soft: #e7edf6;
+
+  /* Money only: red = still due / out / problem, green = received / back. */
+  --color-rust: #b42318;
+  --color-rust-fg: #ffffff;
+  --color-pine: #18794e;
+  --color-pine-fg: #ffffff;
+
+  --radius-lg: 0.375rem;
+  --radius-xl: 0.5rem;
 }
 
 @layer base {
@@ -37,7 +46,12 @@
   h2,
   h3 {
     font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: -0.01em;
     text-wrap: balance;
+  }
+  body {
+    font-feature-settings: "tnum" 1;
   }
   p {
     text-wrap: pretty;
@@ -51,7 +65,7 @@
     outline: none;
   }
   :focus-visible {
-    outline: 2px solid var(--color-rust);
+    outline: 2px solid var(--color-brand);
     outline-offset: 2px;
   }
 }
@@ -64,33 +78,42 @@
     gap: 0.5rem;
     min-height: 2.75rem;
     border-radius: var(--radius-lg);
-    padding: 0 1rem;
-    font-weight: 600;
-    transition: background-color 160ms ease;
+    padding: 0 0.875rem;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: background-color 120ms ease, border-color 120ms ease;
+  }
+  @media (min-width: 1024px) {
+    .btn {
+      min-height: 2.25rem;
+    }
   }
   .btn:disabled {
     opacity: 0.45;
   }
-  .btn-rust {
+  /* Main action and "selected" both use the brand colour. */
+  .btn-rust,
+  .btn-pine {
+    background: var(--color-brand);
+    color: var(--color-brand-fg);
+  }
+  .btn-rust:hover:not(:disabled),
+  .btn-pine:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-brand) 88%, black);
+  }
+  .btn-danger {
     background: var(--color-rust);
     color: var(--color-rust-fg);
   }
-  .btn-rust:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--color-rust) 86%, black);
-  }
-  .btn-pine {
-    background: var(--color-pine);
-    color: var(--color-pine-fg);
-  }
-  .btn-pine:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--color-pine) 86%, black);
+  .btn-danger:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-rust) 88%, black);
   }
   .btn-soft {
     background: var(--color-sand);
     color: var(--color-ink);
   }
   .btn-soft:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--color-sand) 72%, var(--color-line));
+    background: color-mix(in srgb, var(--color-sand) 80%, var(--color-line));
   }
   .btn-ghost {
     border: 1px solid var(--color-line);
@@ -110,10 +133,99 @@
     font-size: 1rem;
     color: var(--color-ink);
   }
+  @media (min-width: 1024px) {
+    .field {
+      height: 2.375rem;
+      font-size: 0.9375rem;
+    }
+  }
+  .field:focus-visible {
+    outline: none;
+    border-color: var(--color-brand);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand) 18%, transparent);
+  }
+  .field::placeholder {
+    color: color-mix(in srgb, var(--color-muted) 75%, transparent);
+  }
   .field-area {
     height: auto;
     min-height: 2.75rem;
     padding: 0.6rem 0.75rem;
+  }
+  /* Serial numbers, bill numbers and other codes. */
+  .code {
+    font-family: var(--font-mono);
+    font-size: 0.92em;
+    letter-spacing: -0.01em;
+  }
+  /* Small uppercase column labels, like the ruled headings of a register. */
+  .label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+  /* A row of figures under a page title: "9 out · ₹4,250 to collect". */
+  .tally {
+    display: grid;
+    overflow: hidden;
+    border-top: 1px solid var(--color-line);
+    border-bottom: 1px solid var(--color-line);
+    background: var(--color-card);
+  }
+  .tally > * {
+    min-width: 0;
+    padding: 0.625rem 0.875rem;
+    box-shadow: -1px 0 0 var(--color-line), 0 -1px 0 var(--color-line);
+  }
+  /* Segmented control: tabs and filters. */
+  .seg {
+    display: inline-flex;
+    gap: 0;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-lg);
+    background: var(--color-card);
+    overflow: hidden;
+  }
+  .seg > button {
+    min-height: 2.25rem;
+    padding: 0 0.75rem;
+    font-size: 0.875rem;
+    color: var(--color-muted);
+    white-space: nowrap;
+  }
+  .seg > button + button {
+    border-left: 1px solid var(--color-line);
+  }
+  /* Underlined tabs for the sections of a page. */
+  .tabs {
+    display: flex;
+    width: max-content;
+    min-width: 100%;
+    border-bottom: 1px solid var(--color-line);
+  }
+  .tabs > button {
+    margin-bottom: -1px;
+    padding: 0.625rem 0.75rem;
+    border-bottom: 2px solid transparent;
+    font-size: 0.875rem;
+    color: var(--color-muted);
+    white-space: nowrap;
+  }
+  .tabs > button:hover {
+    color: var(--color-ink);
+  }
+  .tabs > button[aria-selected="true"] {
+    border-bottom-color: var(--color-brand);
+    color: var(--color-ink);
+    font-weight: 600;
+  }
+  .seg > button[aria-pressed="true"],
+  .seg > button[aria-selected="true"] {
+    background: var(--color-brand-soft);
+    color: var(--color-brand);
+    font-weight: 600;
   }
 }
 
@@ -125,24 +237,29 @@ html[data-size="lg"] {
 }
 html[data-theme="dark"] {
   color-scheme: dark;
-  --color-paper: #1a1714;
-  --color-card: #26211c;
-  --color-ink: #f4efe6;
-  --color-muted: #c9bfb0;
-  --color-line: #3f372e;
-  --color-sand: #332c25;
-  --color-pine: #8fceb0;
-  --color-pine-fg: #10241b;
-  --color-rust: #e08a5d;
-  --color-rust-fg: #2a140c;
+  --color-paper: #0e1114;
+  --color-card: #161a1f;
+  --color-ink: #e7e9ec;
+  --color-muted: #99a2ad;
+  --color-line: #2a3038;
+  --color-sand: #1e2329;
+  --color-brand: #86aef0;
+  --color-brand-fg: #0b1626;
+  --color-brand-soft: #1b2a42;
+  --color-pine: #5fcf95;
+  --color-pine-fg: #062014;
+  --color-rust: #f2877c;
+  --color-rust-fg: #2a0b08;
 }
+/* Optional second brand colour (Settings → Appearance). */
 html[data-accent="pine"] {
-  --color-rust: #1e4d3c;
-  --color-rust-fg: #f3faf6;
+  --color-brand: #1d5c45;
+  --color-brand-soft: #e3f0ea;
 }
 html[data-theme="dark"][data-accent="pine"] {
-  --color-rust: #8fceb0;
-  --color-rust-fg: #10241b;
+  --color-brand: #7fcfae;
+  --color-brand-fg: #082018;
+  --color-brand-soft: #16302a;
 }
 
 @media (prefers-reduced-motion: reduce) {

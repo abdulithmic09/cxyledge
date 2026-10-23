@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpRight, BellRing, ChevronLeft, ChevronRight, IndianRupee, MessageCircle, Phone } from "lucide-react";
+import { ArrowUpRight, BellRing, ChevronLeft, ChevronRight, IndianRupee, MessageCircle, Phone, Search, Share2 } from "lucide-react";
 import { deleteDocument, listCompanyMeta, restoreDeleted, saveCompanyMeta, saveDocument, type DocRecord, type Entry, type Payment, type YardInfo } from "@/lib/inventory/api";
 import { companyBalances, companyLedger, movementLabel, paymentLabel, type CompanyBalance } from "@/lib/inventory/analyse";
 import { balanceMessage, waNumber, whatsappLink } from "@/lib/inventory/whatsapp";
@@ -19,7 +19,7 @@ import { groupBills } from "@/components/yard/bill-views";
 import { openEntrySheet } from "@/components/yard/entry-launcher";
 import { requestBillEdit } from "@/lib/inventory/nav-requests";
 import { ExportBar } from "@/components/yard/export-bar";
-import { Field, Panel, Stat } from "@/components/yard/ui";
+import { Field, PageHead, Panel, Stat, Tally } from "@/components/yard/ui";
 
 type Filter = "all" | "out" | "due" | "late";
 
@@ -45,6 +45,7 @@ export function CustomersView({
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [showReminders, setShowReminders] = useState(false);
+  const [showShare, setShowShare] = useState(false);
   const balances = useMemo(() => companyBalances(entries, payments), [entries, payments]);
   const metaQuery = useQuery({ queryKey: ["company-meta"], queryFn: () => listCompanyMeta() });
   const tracking = useQuery({ queryKey: ["tracking"], queryFn: () => getTracking() });
@@ -133,101 +134,112 @@ export function CustomersView({
   };
 
   return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <h2 className="font-display text-3xl">Customers</h2>
-        <p className="mt-1 text-sm text-muted">Who has your cylinders and who owes you. Tap a company for its ledger, payments, bills and files.</p>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <Stat label="Cylinders at customers" value={stillOut} tone="rust" />
-        <Stat label="To collect" value={rupee(toCollect, 0)} tone="pine" />
-      </div>
+    <div className="flex flex-col gap-3">
+      <PageHead
+        title="Customers"
+        detail={`${balances.length} ${balances.length === 1 ? "company" : "companies"}`}
+        action={
+          open.length ? (
+            <button type="button" className={cn("btn h-9 min-h-0 gap-1.5 px-3 text-sm", showShare ? "btn-pine" : "btn-ghost")} aria-expanded={showShare} onClick={() => setShowShare((value) => !value)}>
+              <Share2 className="size-4" aria-hidden /> Share list
+            </button>
+          ) : null
+        }
+      />
+      {showShare ? (
+        <div className="rounded-lg border border-line bg-card p-3">
+          <ExportBar title="Cxyledge balance summary" filename="cxyledge-balance" lines={lines} csv={csv} />
+        </div>
+      ) : null}
+      <Tally
+        items={[
+          { label: "Cylinders out", value: stillOut },
+          { label: "To collect", value: rupee(toCollect, 0), tone: toCollect > 0 ? "rust" : undefined },
+          { label: "Late", value: late.size ? rupee(lateTotal, 0) : "None", tone: late.size ? "rust" : undefined },
+        ]}
+      />
 
       <button
         type="button"
-        className={cn("flex items-center gap-3 rounded-xl border px-4 py-3 text-left text-sm", late.size ? "border-rust/40 bg-sand" : "border-line bg-card")}
+        className="flex items-center gap-2.5 rounded-lg border border-line bg-card px-3.5 py-2.5 text-left text-sm hover:bg-sand"
         aria-expanded={showReminders}
         onClick={() => setShowReminders((value) => !value)}
       >
-        <BellRing className={cn("size-5 shrink-0", late.size ? "text-rust" : "text-pine")} aria-hidden />
+        <BellRing className={cn("size-4 shrink-0", late.size ? "text-rust" : "text-muted")} aria-hidden />
         <span className="min-w-0 flex-1">
           {late.size ? (
-            <>
-              <span className="font-semibold text-rust">
-                {late.size} compan{late.size === 1 ? "y is" : "ies are"} late · {rupee(lateTotal, 0)} past due.
-              </span>{" "}
-              Send reminders on WhatsApp.
-            </>
+            <span className="font-medium">
+              {late.size} late · send reminders
+            </span>
           ) : (
-            <>Nobody is late. Reminders and credit days.</>
+            <>Reminders and credit days</>
           )}
         </span>
-        <ChevronRight className={cn("size-4 shrink-0 transition-transform", showReminders && "rotate-90")} aria-hidden />
+        <ChevronRight className={cn("size-4 shrink-0 text-muted transition-transform", showReminders && "rotate-90")} aria-hidden />
       </button>
       {showReminders ? <OverduePanel entries={entries} payments={payments} yardName={yard.name} /> : null}
 
-      <input
-        className="field"
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-        placeholder="Search name, serial, bill, keyword or phone"
-        aria-label="Search customers"
-      />
-      <div className="flex flex-wrap gap-2">
-        {(
-          [
-            ["all", "All"],
-            ["out", "Cylinders out"],
-            ["due", "Money due"],
-            ["late", "Late"],
-          ] as Array<[Filter, string]>
-        ).map(([id, label]) => (
-          <button key={id} type="button" className={cn("btn px-3 text-sm", filter === id ? "btn-pine" : "btn-ghost")} onClick={() => setFilter(id)}>
-            {label}
-            <span className="ml-1.5 tabular-nums opacity-70">{counts[id]}</span>
-          </button>
-        ))}
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+        <div className="relative min-w-0 flex-1 lg:max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" aria-hidden />
+          <input className="field pl-9" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name, phone, serial or bill no." aria-label="Search customers" />
+        </div>
+        <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+          <div className="seg" role="group" aria-label="Show">
+            {(
+              [
+                ["all", "All"],
+                ["out", "Cylinders out"],
+                ["due", "Money due"],
+                ["late", "Late"],
+              ] as Array<[Filter, string]>
+            ).map(([id, label]) => (
+              <button key={id} type="button" aria-pressed={filter === id} onClick={() => setFilter(id)}>
+                {label}
+                <span className="ml-1.5 tabular-nums opacity-60">{counts[id]}</span>
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {rows.length === 0 ? (
-        <Panel title={balances.length === 0 ? "No customers yet" : "No match"}>
-          <p className="text-sm text-muted">
-            {balances.length === 0 ? "Customers appear as soon as you give cylinders or make a bill. Tap New entry to start." : "Try a serial number, a bill number, or part of the name."}
-          </p>
-        </Panel>
+        <div className="rounded-lg border border-dashed border-line bg-card px-4 py-8 text-center text-sm text-muted">
+          {balances.length === 0 ? "No customers yet. They appear once you give cylinders or make a bill." : "No match. Try a serial number, a bill number or part of the name."}
+        </div>
       ) : (
-        <ul className="overflow-hidden rounded-xl border border-line bg-card">
-          {rows.map((row) => {
-            const overdue = late.get(row.company) ?? 0;
-            return (
-              <li key={row.company} className="border-b border-line last:border-b-0">
-                <button type="button" className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-sand" onClick={() => setSelected(row.company)}>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex flex-wrap items-center gap-2">
-                      <span className="truncate font-semibold">{row.company}</span>
-                      {overdue ? <span className="rounded-full bg-rust px-2 py-0.5 text-[0.7rem] font-semibold text-rust-fg">Late</span> : null}
+        <div className="-mx-4 border-y border-line bg-card sm:mx-0 sm:rounded-lg sm:border">
+          <div className="label grid grid-cols-[minmax(0,1fr)_4.5rem_6.5rem_1rem] gap-3 border-b border-line px-4 py-2">
+            <span>Company</span>
+            <span className="text-right">Out</span>
+            <span className="text-right">To collect</span>
+            <span />
+          </div>
+          <ul>
+            {rows.map((row) => {
+              const overdue = late.get(row.company) ?? 0;
+              return (
+                <li key={row.company} className="border-b border-line last:border-b-0">
+                  <button type="button" className="grid w-full grid-cols-[minmax(0,1fr)_4.5rem_6.5rem_1rem] items-center gap-3 px-4 py-2.5 text-left hover:bg-sand/60" onClick={() => setSelected(row.company)}>
+                    <span className="min-w-0">
+                      <span className="flex items-center gap-2">
+                        <span className="truncate font-medium">{row.company}</span>
+                        {overdue ? <span className="shrink-0 rounded bg-rust/10 px-1.5 py-px text-[0.68rem] font-semibold uppercase tracking-wide text-rust">Late</span> : null}
+                      </span>
+                      <span className="block truncate text-xs text-muted">
+                        {row.byType.length ? row.byType.map((t) => `${t.out} ${t.type}`).join(" · ") : "No cylinders out"}
+                      </span>
                     </span>
-                    <span className="mt-0.5 block truncate text-xs text-muted">
-                      {row.byType.length ? row.byType.map((t) => `${t.out} ${t.type}`).join(" · ") : row.outstandingQty ? `${row.outstandingQty} cylinders` : "No cylinders out"}
-                    </span>
-                  </span>
-                  <span className="shrink-0 text-right">
-                    <span className="block font-semibold tabular-nums text-rust">{row.outstandingQty} out</span>
-                    <span className={cn("block text-xs tabular-nums", row.toCollect ? "text-ink" : "text-muted")}>{row.toCollect ? `${rupee(row.toCollect, 0)} due` : "Nothing due"}</span>
-                  </span>
-                  <ChevronRight className="size-4 shrink-0 text-muted" aria-hidden />
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+                    <span className={cn("text-right font-semibold tabular-nums", !row.outstandingQty && "font-normal text-muted")}>{row.outstandingQty}</span>
+                    <span className={cn("text-right tabular-nums", row.toCollect ? "font-semibold text-rust" : "text-muted")}>{row.toCollect ? rupee(row.toCollect, 0) : "—"}</span>
+                    <ChevronRight className="size-4 text-muted" aria-hidden />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       )}
-
-      {open.length ? (
-        <Panel title="Share the balance list">
-          <ExportBar title="Cxyledge balance summary" filename="cxyledge-balance" lines={lines} csv={csv} />
-        </Panel>
-      ) : null}
     </div>
   );
 }
@@ -285,69 +297,66 @@ function CompanyPage({
 
   return (
     <div className="flex flex-col gap-4">
-      <button type="button" className="-ml-2 flex w-fit items-center gap-1 rounded-lg px-2 py-1 text-sm font-semibold text-muted hover:bg-sand" onClick={onBack}>
-        <ChevronLeft className="size-4" aria-hidden /> All customers
+      <button type="button" className="-ml-2 -mb-1 flex w-fit items-center gap-1 rounded-md px-2 py-1 text-sm text-muted hover:bg-sand hover:text-ink" onClick={onBack}>
+        <ChevronLeft className="size-4" aria-hidden /> Customers
       </button>
 
-      <section className="rounded-xl border border-line bg-card p-4 sm:p-5">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <h2 className="min-w-0 font-display text-3xl leading-tight">{company}</h2>
-          {lateAmount ? <span className="rounded-full bg-rust px-2.5 py-1 text-xs font-semibold text-rust-fg">{rupee(lateAmount, 0)} late</span> : null}
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <h2 className="min-w-0 text-xl font-semibold leading-tight sm:text-2xl">{company}</h2>
+          {lateAmount ? <span className="rounded bg-rust/10 px-1.5 py-0.5 text-xs font-semibold text-rust">{rupee(lateAmount, 0)} late</span> : null}
         </div>
-        <div className="mt-3 grid grid-cols-2 gap-3">
-          <p>
-            <span className="block text-sm text-muted">Cylinders out</span>
-            <span className="font-display text-3xl tabular-nums text-rust">{balance.outstandingQty}</span>
-          </p>
-          <p>
-            <span className="block text-sm text-muted">To collect</span>
-            <span className="font-display text-3xl tabular-nums text-pine">{rupee(balance.toCollect, 0)}</span>
-          </p>
-        </div>
-        {balance.byType.length ? (
-          <p className="mt-2 text-sm text-muted">{balance.byType.map((t) => `${t.out} × ${t.type}`).join(" · ")}</p>
+        <Tally
+          items={[
+            { label: "Cylinders out", value: balance.outstandingQty },
+            { label: "To collect", value: rupee(balance.toCollect, 0), tone: balance.toCollect > 0 ? "rust" : undefined },
+          ]}
+        />
+        {balance.byType.length || balance.outstandingSerials.length ? (
+          <div className="text-sm">
+            {balance.byType.length ? <p>{balance.byType.map((t) => `${t.out} × ${t.type}`).join(" · ")}</p> : null}
+            {balance.outstandingSerials.length ? (
+              <p className="code mt-0.5 text-xs text-muted">
+                {balance.outstandingSerials.slice(0, 16).join(", ")}
+                {balance.outstandingSerials.length > 16 ? ` +${balance.outstandingSerials.length - 16} more` : ""}
+              </p>
+            ) : null}
+          </div>
         ) : null}
-        {balance.outstandingSerials.length ? (
-          <p className="mt-1 text-xs text-muted">
-            {balance.outstandingSerials.slice(0, 16).join(", ")}
-            {balance.outstandingSerials.length > 16 ? ` +${balance.outstandingSerials.length - 16} more` : ""}
-          </p>
-        ) : null}
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap [&>*]:whitespace-nowrap [&>*]:px-3 [&>*]:text-sm">
+        <div className="flex flex-wrap gap-2 [&>*]:h-9 [&>*]:min-h-0 [&>*]:px-3 [&>*]:text-sm">
           {canEdit ? (
             <>
-              <button type="button" className="btn btn-rust gap-2" onClick={() => openEntrySheet({ mode: "money", company })}>
+              <button type="button" className="btn btn-rust gap-1.5" onClick={() => openEntrySheet({ mode: "money", company })}>
                 <IndianRupee className="size-4" aria-hidden /> Money received
               </button>
-              <button type="button" className="btn btn-ghost gap-2" onClick={() => openEntrySheet({ mode: "give", company })}>
+              <button type="button" className="btn btn-ghost gap-1.5" onClick={() => openEntrySheet({ mode: "give", company })}>
                 <ArrowUpRight className="size-4" aria-hidden /> Give cylinders
               </button>
             </>
           ) : null}
-          <a className="btn btn-ghost gap-2" href={whatsappLink(phone, balanceMessage({ yardName: yard.name, balance }))} target="_blank" rel="noopener noreferrer">
+          <a className="btn btn-ghost gap-1.5" href={whatsappLink(phone, balanceMessage({ yardName: yard.name, balance }))} target="_blank" rel="noopener noreferrer">
             <MessageCircle className="size-4" aria-hidden /> WhatsApp
           </a>
           {digits ? (
-            <a className="btn btn-ghost gap-2" href={`tel:+${digits}`}>
+            <a className="btn btn-ghost gap-1.5" href={`tel:+${digits}`}>
               <Phone className="size-4" aria-hidden /> Call
             </a>
           ) : (
-            <button type="button" className="btn btn-ghost gap-2 text-muted" onClick={() => setTab("details")}>
+            <button type="button" className="btn btn-ghost gap-1.5 text-muted" onClick={() => setTab("details")}>
               <Phone className="size-4" aria-hidden /> Add number
             </button>
           )}
         </div>
-      </section>
+      </div>
 
       <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0" role="tablist" aria-label={`${company} sections`}>
-        <div className="flex w-max gap-1 rounded-xl border border-line bg-card p-1">
+        <div className="tabs">
           {TABS.map((item) => (
             <button
               key={item.id}
               type="button"
               role="tab"
               aria-selected={tab === item.id}
-              className={cn("btn h-9 shrink-0 px-3 text-sm", tab === item.id ? "btn-pine" : "")}
               onClick={() => setTab(item.id)}
             >
               {item.label}
@@ -407,7 +416,7 @@ function LedgerTab({ company, entries, payments, balance }: { company: string; e
   );
   return (
     <Panel title="Ledger">
-      <p className="mb-3 text-sm text-muted">Every bill and payment in date order. Balance is what {company} owes you; below zero means you owe them.</p>
+      <p className="mb-3 text-xs text-muted">Balance is what {company} owes you. Below zero means you owe them.</p>
       {ledger.length === 0 ? (
         <p className="text-sm text-muted">No amounts recorded yet.</p>
       ) : (

@@ -9,7 +9,7 @@ import { TypePicker } from "@/components/yard/type-picker";
 import { csvBlob, downloadBlob, shareBlob, toCsv } from "@/lib/inventory/files";
 import { blobToDataUrl, dmy, lineAmount, makeBillPdf, pdfName, printPdf, type BillData, type BillLine } from "@/lib/inventory/bill-pdf";
 import { cn } from "@/lib/cn";
-import { Field, Panel } from "@/components/yard/ui";
+import { Field, PageHead, Panel } from "@/components/yard/ui";
 import { useRole } from "@/lib/inventory/role";
 import { BillPreview, BillRegister, groupBills, type SavedBill } from "@/components/yard/bill-views";
 import { ChallanForm } from "@/components/yard/challan-form";
@@ -252,16 +252,13 @@ export function BillsView({ yard, entries, onChanged }: { yard: YardInfo; entrie
   }, [bills]);
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="font-display text-3xl">Bills</h2>
-          <p className="mt-1 text-sm text-muted">Sale and purchase bills on your letterhead, numbered by financial year and kept in each company&apos;s files.</p>
-        </div>
-        <div className="grid grid-cols-3 gap-1 rounded-xl border border-line bg-card p-1" role="tablist">
+    <div className="flex flex-col gap-3">
+      <PageHead title="Bills" detail={`${bills.length} ${bills.length === 1 ? "bill" : "bills"}`} />
+      <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+        <div className="tabs" role="tablist">
           {(["new", "challan", "all"] as const).map((item) => (
-            <button key={item} type="button" role="tab" aria-selected={tab === item} className={cn("btn h-9 px-3 text-sm sm:px-4", tab === item ? "btn-pine" : "")} onClick={() => setTab(item)}>
-              {item === "new" ? (editing ? (editing.startsWith("DC/") ? "Bill challan" : "Edit bill") : "New bill") : item === "challan" ? "Challan" : `All (${bills.length})`}
+            <button key={item} type="button" role="tab" aria-selected={tab === item} onClick={() => setTab(item)}>
+              {item === "new" ? (editing ? (editing.startsWith("DC/") ? "Bill challan" : "Edit bill") : "New bill") : item === "challan" ? "Challan" : `All bills (${bills.length})`}
             </button>
           ))}
         </div>

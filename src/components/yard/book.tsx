@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { CloudOff, Plus, Trash2 } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, CloudOff, PackagePlus, Plus, Search, Trash2 } from "lucide-react";
 import {
   deleteEntry,
   listMembers,
@@ -15,7 +15,7 @@ import { companyBalances, movementLabel, paymentLabel } from "@/lib/inventory/an
 import { formatDay } from "@/lib/inventory/model";
 import { rupee } from "@/lib/inventory/serials";
 import { cn } from "@/lib/cn";
-import { Stat } from "@/components/yard/ui";
+import { PageHead, Tally } from "@/components/yard/ui";
 import { useRole } from "@/lib/inventory/role";
 import { onShowEntry, openEntrySheet, takePendingShow } from "@/components/yard/entry-launcher";
 import { useOutbox } from "@/lib/inventory/outbox";
@@ -71,6 +71,7 @@ export function BookView({
   const [undo, setUndo] = useState<{ id: string; label: string } | null>(null);
   const [error, setError] = useState("");
   const [flash, setFlash] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
   const [filter, setFilter] = useState<PaymentStatus | "all">("all");
   const [kind, setKind] = useState<Kind>("all");
   const [when, setWhen] = useState<When>("all");
@@ -145,6 +146,7 @@ export function BookView({
       setKind("all");
       setWhen("all");
       setFlash(id);
+      setExpanded(id);
       window.setTimeout(() => document.getElementById(`entry-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 120);
       window.setTimeout(() => setFlash(null), 2600);
     };
@@ -153,186 +155,254 @@ export function BookView({
     return onShowEntry(show);
   }, []);
 
+  const visible = shown.slice(0, limit);
+  const days: Array<{ day: string; rows: Entry[] }> = [];
+  for (const entry of visible) {
+    const last = days[days.length - 1];
+    if (last && last.day === entry.entryDate) last.rows.push(entry);
+    else days.push({ day: entry.entryDate, rows: [entry] });
+  }
+
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="font-display text-3xl">Cylinder book</h2>
-          <p className="mt-1 text-sm text-muted">
-            {entries.length} {entries.length === 1 ? "line" : "lines"}
-            {synced ? ` · synced ${synced}` : ""}. A new line on any signed-in phone or computer shows up here.
-          </p>
-        </div>
-      </div>
+    <div className="flex flex-col gap-3">
+      <PageHead title="Book" detail={`${entries.length} ${entries.length === 1 ? "line" : "lines"}${synced ? ` · synced ${synced}` : ""}`} />
 
       {undo ? (
-        <p className="rounded-xl border border-line bg-card px-4 py-3 text-sm" role="status">
-          Entry deleted ({undo.label}). It&apos;s in Settings → Recently deleted for 30 days.{" "}
-          <button type="button" className="font-semibold text-pine underline" disabled={restore.isPending} onClick={() => restore.mutate(undo.id)}>
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-line bg-card px-3.5 py-2.5 text-sm" role="status">
+          <span className="min-w-0 flex-1">Deleted {undo.label}. Kept in Settings → Recently deleted for 30 days.</span>
+          <button type="button" className="font-semibold text-brand" disabled={restore.isPending} onClick={() => restore.mutate(undo.id)}>
             Undo
-          </button>{" "}
-          <button type="button" className="text-muted underline" onClick={() => setUndo(null)}>
+          </button>
+          <button type="button" className="text-muted" onClick={() => setUndo(null)}>
             Dismiss
           </button>
         </p>
       ) : null}
       {error ? (
-        <p role="alert" className="rounded-xl border border-line bg-sand px-4 py-3 text-sm text-rust">
+        <p role="alert" className="rounded-lg border border-rust/30 bg-rust/5 px-3.5 py-2.5 text-sm text-rust">
           {error}
         </p>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-3">
-        <Stat label="Still with customers" value={stillOut} tone="rust" />
-        <Stat label="To collect" value={rupee(toCollect, 0)} tone="pine" />
-      </div>
+      <Tally
+        items={[
+          { label: "Out with customers", value: stillOut },
+          { label: "To collect", value: rupee(toCollect, 0), tone: toCollect > 0 ? "rust" : undefined },
+        ]}
+      />
 
       {waiting.length ? (
-        <div className="rounded-xl border border-dashed border-rust/50 bg-sand px-4 py-3 text-sm" role="status">
+        <div className="rounded-lg border border-dashed border-line bg-card px-3.5 py-2.5 text-sm" role="status">
           <p className="flex items-center gap-2 font-semibold">
-            <CloudOff className="size-4 text-rust" aria-hidden /> {waiting.length} saved on this phone, waiting for internet
+            <CloudOff className="size-4 text-muted" aria-hidden /> {waiting.length} waiting for internet
           </p>
           <ul className="mt-1 text-muted">
             {waiting.map((item) => (
-              <li key={item.id}>· {item.label}</li>
+              <li key={item.id}>{item.label}</li>
             ))}
           </ul>
-          <p className="mt-1 text-xs text-muted">They are added to the book by themselves as soon as the phone is back online. Keep this app open or open it again.</p>
+          <p className="mt-1 text-xs text-muted">Saved on this phone. They go into the book by themselves once you&apos;re back online.</p>
         </div>
       ) : null}
 
-      <div className="flex gap-2">
-        <input
-          className="field min-w-0 flex-1 sm:max-w-xs"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search company, serial, or bill"
-          aria-label="Search entries"
-        />
-        <select className="field w-auto shrink-0" value={when} onChange={(event) => setWhen(event.target.value as When)} aria-label="Date">
-          <option value="all">Any date</option>
-          <option value="today">Today</option>
-          <option value="week">Last 7 days</option>
-          <option value="month">This month</option>
-        </select>
-      </div>
-      <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-        <div className="flex w-max items-center gap-2">
-          {KINDS.map((item) => (
-            <button key={item.id} type="button" className={cn("btn h-9 px-3 text-sm", kind === item.id ? "btn-pine" : "btn-ghost")} onClick={() => setKind(item.id)}>
-              {item.label}
-            </button>
-          ))}
-          <span className="mx-1 h-6 w-px bg-line" aria-hidden />
-          {PAYMENTS.map((payment) => (
-            <button
-              key={payment.id}
-              type="button"
-              aria-pressed={filter === payment.id}
-              className={cn("btn h-9 px-3 text-sm", filter === payment.id ? "btn-pine" : "btn-ghost")}
-              onClick={() => setFilter(filter === payment.id ? "all" : payment.id)}
-            >
-              {payment.label}
-            </button>
-          ))}
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+        <div className="flex min-w-0 flex-1 gap-2 lg:max-w-md">
+          <div className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" aria-hidden />
+            <input className="field pl-9" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Company, serial or bill no." aria-label="Search entries" />
+          </div>
+          <select className="field w-auto shrink-0" value={when} onChange={(event) => setWhen(event.target.value as When)} aria-label="Date">
+            <option value="all">Any date</option>
+            <option value="today">Today</option>
+            <option value="week">Last 7 days</option>
+            <option value="month">This month</option>
+          </select>
+        </div>
+        <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+          <div className="flex w-max items-center gap-2">
+            <div className="seg" role="group" aria-label="Type">
+              {KINDS.map((item) => (
+                <button key={item.id} type="button" aria-pressed={kind === item.id} onClick={() => setKind(item.id)}>
+                  {item.label}
+                </button>
+              ))}
+            </div>
+            <select className="field !h-9 w-auto text-sm" value={filter} onChange={(event) => setFilter(event.target.value as PaymentStatus | "all")} aria-label="Payment">
+              <option value="all">Any payment</option>
+              {PAYMENTS.map((payment) => (
+                <option key={payment.id} value={payment.id}>
+                  {payment.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
       {shown.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-line bg-card px-4 py-8 text-center">
-          <p className="text-sm text-muted">
-            {entries.length === 0
-              ? "No cylinders booked yet. Tap New entry to give cylinders, take empties back, or record stock you bought."
-              : "Nothing matches that filter."}
-          </p>
+        <div className="rounded-lg border border-dashed border-line bg-card px-4 py-8 text-center">
+          <p className="text-sm text-muted">{entries.length === 0 ? "Nothing in the book yet." : "Nothing matches these filters."}</p>
           {entries.length === 0 && canEdit ? (
-            <button type="button" className="btn btn-rust mt-4 gap-2" onClick={() => openEntrySheet()}>
+            <button type="button" className="btn btn-rust mt-3 gap-2" onClick={() => openEntrySheet()}>
               <Plus className="size-4" aria-hidden /> New entry
             </button>
           ) : null}
           {entries.length === 0 && isOwner ? (
-            <button type="button" className="btn btn-ghost mt-4" disabled={sample.isPending} onClick={() => sample.mutate()}>
+            <button type="button" className="btn btn-ghost ml-2 mt-3" disabled={sample.isPending} onClick={() => sample.mutate()}>
               {sample.isPending ? "Adding…" : "Add a sample week"}
             </button>
           ) : null}
         </div>
       ) : (
-        <ul className="flex flex-col gap-3">
-          {shown.slice(0, limit).map((entry) => {
-            const isReturn = entry.movement === "return";
-            const parent = isReturn && entry.parentId ? byId.get(entry.parentId) : undefined;
-            return (
-            <li key={entry.id} id={`entry-${entry.id}`} className={cn("rounded-xl border p-4 transition-colors duration-700", flash === entry.id ? "border-pine bg-pine/10 ring-2 ring-pine/40" : "border-line bg-card")}>
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h3 className="font-display text-xl leading-tight">{entry.companyName}</h3>
-                  <p className="mt-1 text-sm text-muted">
-                    {formatDay(entry.entryDate)} · {WORD[entry.movement] ?? movementLabel(entry.movement)} · {entry.quantity}{" "}
-                    {entry.quantity === 1 ? "cylinder" : "cylinders"}
-                    {entry.cylinderType ? ` · ${entry.cylinderType}` : ""}
-                    {entry.createdBy === userId ? " · by you" : ` · by ${memberName.get(entry.createdBy) ?? "a teammate"}`}
-                  </p>
-                </div>
-                {isReturn ? (
-                  <span className="shrink-0 rounded-full border border-pine/50 px-2.5 py-1 text-xs font-semibold text-pine">Returned</span>
-                ) : (
-                  <span className={cn("shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold", entry.paymentStatus === "received" ? "bg-pine text-pine-fg" : "bg-sand text-rust")}>
-                    {paymentLabel(entry.paymentStatus)}
-                  </span>
-                )}
-              </div>
-              {entry.serialNo ? <p className="mt-3 whitespace-pre-wrap text-sm">Serial {entry.serialNo}</p> : null}
-              {isReturn ? (
-                <p className="mt-2 text-sm text-muted">
-                  {parent ? `Back from the delivery of ${formatDay(parent.entryDate)}${parent.billNo ? ` (${parent.billNo})` : ""}.` : "Taken back."}
-                  {entry.note && entry.note !== "Marked received" ? ` ${entry.note}` : ""}
-                </p>
-              ) : (
-                <>
-                  <p className="mt-2 text-sm tabular-nums text-muted">
-                    {entry.unitPrice != null ? `Price ${rupee(entry.unitPrice)} · ` : ""}
-                    Due {rupee(entry.amountDue)} · Received {rupee(entry.amountPaid)}
-                    {entry.billNo ? ` · ${entry.billNo}` : ""}
-                  </p>
-                  {entry.note ? <p className="mt-2 text-sm">{entry.note}</p> : null}
-                </>
-              )}
-              {canEdit ? (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {isReturn ? null : (
-                  <button type="button" className="btn btn-ghost" onClick={() => openEntrySheet({ entry })}>
-                    Edit
-                  </button>
-                )}
-                {!isOwner ? null : pendingDelete === entry.id ? (
-                  <>
-                    <button type="button" className="btn btn-rust" onClick={() => remove.mutate(entry)} disabled={remove.isPending}>
-                      {isReturn ? "Undo this return" : "Delete"}
-                    </button>
-                    <button type="button" className="btn btn-ghost" onClick={() => setPendingDelete(null)}>
-                      Keep
-                    </button>
-                  </>
-                ) : (
-                  <button type="button" className="btn btn-ghost size-11 px-0" aria-label={isReturn ? `Undo return from ${entry.companyName}` : `Delete ${entry.companyName}`} onClick={() => setPendingDelete(entry.id)}>
-                    <Trash2 className="size-4" aria-hidden />
-                  </button>
-                )}
-              </div>
-              ) : null}
-            </li>
-            );
-          })}
+        <div className="-mx-4 border-y border-line bg-card sm:mx-0 sm:rounded-lg sm:border">
+          <div className="label hidden grid-cols-[2rem_minmax(0,1.3fr)_minmax(0,1.6fr)_7.5rem_7rem] gap-3 border-b border-line px-4 py-2 lg:grid">
+            <span />
+            <span>Company</span>
+            <span>Cylinders</span>
+            <span className="text-right">Amount</span>
+            <span className="text-right">Status</span>
+          </div>
+          {days.map((group) => (
+            <section key={group.day} aria-label={formatDay(group.day)}>
+              <h3 className="label sticky top-14 z-[1] border-b border-line bg-sand px-4 py-1.5">{formatDay(group.day)}</h3>
+              <ul>
+                {group.rows.map((entry) => {
+                  const isReturn = entry.movement === "return";
+                  const parent = isReturn && entry.parentId ? byId.get(entry.parentId) : undefined;
+                  const serials = entry.serialNo.split(/[\n,]+/).map((item) => item.trim()).filter(Boolean);
+                  const open = expanded === entry.id;
+                  const Glyph = entry.movement === "return" ? ArrowDownLeft : entry.movement === "purchase" ? PackagePlus : ArrowUpRight;
+                  const status = isReturn ? "Returned" : entry.movement === "purchase" ? (entry.paymentStatus === "received" ? "Paid" : entry.paymentStatus === "partial" ? "Part paid" : "Not paid") : paymentLabel(entry.paymentStatus);
+                  return (
+                    <li key={entry.id} id={`entry-${entry.id}`} className={cn("border-b border-line transition-colors duration-700 last:border-b-0", flash === entry.id && "bg-brand-soft")}>
+                      <button
+                        type="button"
+                        aria-expanded={open}
+                        className="grid w-full grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 px-4 py-2.5 text-left hover:bg-sand/60 lg:grid-cols-[2rem_minmax(0,1.3fr)_minmax(0,1.6fr)_7.5rem_7rem]"
+                        onClick={() => setExpanded(open ? null : entry.id)}
+                      >
+                        <span
+                          className={cn(
+                            "grid size-8 place-items-center rounded-md",
+                            isReturn ? "bg-pine/10 text-pine" : entry.movement === "purchase" ? "bg-brand-soft text-brand" : "bg-rust/10 text-rust",
+                          )}
+                          aria-label={WORD[entry.movement] ?? movementLabel(entry.movement)}
+                        >
+                          <Glyph className="size-4" aria-hidden />
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium">{entry.companyName}</span>
+                          <span className="block truncate text-xs text-muted lg:hidden">
+                            {WORD[entry.movement] ?? movementLabel(entry.movement)} {entry.quantity}
+                            {entry.cylinderType ? ` × ${entry.cylinderType}` : ""}
+                            {serials.length ? <span className="code"> · {serials.slice(0, 2).join(", ")}{serials.length > 2 ? ` +${serials.length - 2}` : ""}</span> : null}
+                          </span>
+                        </span>
+                        <span className="hidden min-w-0 text-sm lg:block">
+                          <span className="block truncate">
+                            {WORD[entry.movement] ?? movementLabel(entry.movement)} {entry.quantity}
+                            {entry.cylinderType ? ` × ${entry.cylinderType}` : ""}
+                          </span>
+                          {serials.length ? <span className="code block truncate text-xs text-muted">{serials.slice(0, 4).join(", ")}{serials.length > 4 ? ` +${serials.length - 4}` : ""}</span> : null}
+                        </span>
+                        <span className="text-right lg:contents">
+                          <span className="block text-sm font-semibold tabular-nums lg:text-right">{isReturn ? `+${entry.quantity}` : entry.amountDue != null ? rupee(entry.amountDue, 0) : "—"}</span>
+                          <span
+                            className={cn(
+                              "block text-xs lg:text-right lg:text-sm",
+                              isReturn || entry.paymentStatus === "received" ? "text-pine" : entry.paymentStatus === "partial" ? "text-ink" : "text-rust",
+                            )}
+                          >
+                            {status}
+                          </span>
+                        </span>
+                      </button>
+                      {open ? (
+                        <div className="grid gap-2 border-t border-dashed border-line bg-paper/60 px-4 py-3 pl-[3.75rem] text-sm">
+                          <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-3 gap-y-1">
+                            {serials.length ? (
+                              <>
+                                <dt className="text-muted">Serials</dt>
+                                <dd className="code break-words">{serials.join(", ")}</dd>
+                              </>
+                            ) : null}
+                            {isReturn ? (
+                              <>
+                                <dt className="text-muted">From</dt>
+                                <dd>{parent ? `Delivery of ${formatDay(parent.entryDate)}${parent.billNo ? ` · ${parent.billNo}` : ""}` : "Taken back"}</dd>
+                              </>
+                            ) : (
+                              <>
+                                {entry.unitPrice != null ? (
+                                  <>
+                                    <dt className="text-muted">Price</dt>
+                                    <dd className="tabular-nums">{rupee(entry.unitPrice)} each</dd>
+                                  </>
+                                ) : null}
+                                <dt className="text-muted">Due / received</dt>
+                                <dd className="tabular-nums">
+                                  {rupee(entry.amountDue)} / {rupee(entry.amountPaid)}
+                                </dd>
+                                {entry.billNo ? (
+                                  <>
+                                    <dt className="text-muted">Bill</dt>
+                                    <dd className="code">{entry.billNo}</dd>
+                                  </>
+                                ) : null}
+                              </>
+                            )}
+                            <dt className="text-muted">Entered by</dt>
+                            <dd>{entry.createdBy === userId ? "You" : (memberName.get(entry.createdBy) ?? "A teammate")}</dd>
+                            {entry.note && entry.note !== "Marked received" ? (
+                              <>
+                                <dt className="text-muted">Note</dt>
+                                <dd>{entry.note}</dd>
+                              </>
+                            ) : null}
+                          </dl>
+                          {canEdit ? (
+                            <div className="flex flex-wrap gap-2 pt-1">
+                              {isReturn ? null : (
+                                <button type="button" className="btn btn-ghost h-9 min-h-0 px-3 text-sm" onClick={() => openEntrySheet({ entry })}>
+                                  Edit
+                                </button>
+                              )}
+                              {!isOwner ? null : pendingDelete === entry.id ? (
+                                <>
+                                  <button type="button" className="btn btn-danger h-9 min-h-0 px-3 text-sm" onClick={() => remove.mutate(entry)} disabled={remove.isPending}>
+                                    {isReturn ? "Undo this return" : "Delete"}
+                                  </button>
+                                  <button type="button" className="btn btn-ghost h-9 min-h-0 px-3 text-sm" onClick={() => setPendingDelete(null)}>
+                                    Keep
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost h-9 min-h-0 gap-1.5 px-3 text-sm text-muted"
+                                  aria-label={isReturn ? `Undo return from ${entry.companyName}` : `Delete ${entry.companyName}`}
+                                  onClick={() => setPendingDelete(entry.id)}
+                                >
+                                  <Trash2 className="size-4" aria-hidden /> {isReturn ? "Undo return" : "Delete"}
+                                </button>
+                              )}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ))}
           {shown.length > limit ? (
-            <li>
-              <button type="button" className="btn btn-ghost w-full" onClick={() => setLimit((value) => value + 100)}>
-                Show more ({shown.length - limit} older lines)
-              </button>
-            </li>
+            <button type="button" className="w-full border-t border-line px-4 py-3 text-sm font-medium text-brand hover:bg-sand" onClick={() => setLimit((value) => value + 100)}>
+              Show {Math.min(100, shown.length - limit)} older lines
+            </button>
           ) : null}
-        </ul>
+        </div>
       )}
-
     </div>
   );
 }
