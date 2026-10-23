@@ -1,36 +1,37 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-display: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-sans: "Outfit", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Fraunces", Georgia, "Times New Roman", serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
-  /* Surfaces: soft blue-grey page, white cards. */
-  --color-paper: #f4f6fa;
-  --color-card: #ffffff;
-  --color-sand: #eef2f7;
-  --color-line: #e3e8ef;
-  --color-ink: #0f1b2d;
-  --color-muted: #687386;
+  /* The original warm paper and ink. */
+  --color-paper: #f3efe6;
+  --color-card: #fffdf8;
+  --color-sand: #ebe4d6;
+  --color-line: #e4dccd;
+  --color-ink: #1c1915;
+  --color-muted: #6b6257;
 
-  /* Navy for actions and selection, gold for the one main action. */
-  --color-brand: #0f2747;
-  --color-brand-2: #1b4278;
-  --color-brand-fg: #ffffff;
-  --color-brand-soft: #e8eef7;
-  --color-gold: #f5a524;
-  --color-gold-fg: #1b1404;
-  --color-gold-soft: #fff3dc;
+  /* Pine green for the hero, selection and main buttons. */
+  --color-brand: #1e4d3c;
+  --color-brand-2: #2a6650;
+  --color-brand-fg: #f3faf6;
+  --color-brand-soft: #dcebe3;
+  /* Rust for the one main action (New entry) and highlights. */
+  --color-gold: #8f3d16;
+  --color-gold-fg: #fff7f2;
+  --color-gold-soft: #f6e3d8;
 
-  /* Money: red = due / out / problem, green = received / back. */
-  --color-rust: #c0362c;
-  --color-rust-fg: #ffffff;
-  --color-pine: #17834e;
-  --color-pine-fg: #ffffff;
+  /* Money: rust = due / out, pine = received / back. */
+  --color-rust: #8f3d16;
+  --color-rust-fg: #fff7f2;
+  --color-pine: #1e4d3c;
+  --color-pine-fg: #f3faf6;
 
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
-  --shadow-card: 0 1px 2px rgb(15 39 71 / 0.05), 0 2px 8px rgb(15 39 71 / 0.05);
+  --shadow-card: 0 2px 10px rgb(60 40 20 / 0.06);
 }
 
 @layer base {
@@ -51,13 +52,12 @@
   h2,
   h3 {
     font-family: var(--font-display);
-    font-weight: 700;
-    letter-spacing: -0.02em;
+    font-weight: 640;
+    letter-spacing: -0.01em;
     text-wrap: balance;
   }
   body {
     font-feature-settings: "tnum" 1;
-    letter-spacing: -0.005em;
   }
   p {
     text-wrap: pretty;
@@ -104,7 +104,7 @@
   .btn-pine {
     background: var(--color-brand);
     color: var(--color-brand-fg);
-    box-shadow: 0 1px 2px rgb(15 39 71 / 0.2);
+    box-shadow: 0 1px 2px rgb(30 77 60 / 0.25);
   }
   .btn-rust:hover:not(:disabled),
   .btn-pine:hover:not(:disabled) {
@@ -113,7 +113,7 @@
   .btn-gold {
     background: var(--color-gold);
     color: var(--color-gold-fg);
-    box-shadow: 0 6px 18px rgb(245 165 36 / 0.4);
+    box-shadow: 0 8px 18px rgb(143 61 22 / 0.32);
   }
   .btn-gold:hover:not(:disabled) {
     background: color-mix(in srgb, var(--color-gold) 90%, black);
@@ -178,6 +178,7 @@
   }
   /* Small uppercase labels. */
   .label {
+    font-family: var(--font-sans);
     font-size: 0.6875rem;
     font-weight: 700;
     letter-spacing: 0.07em;
@@ -187,6 +188,7 @@
   /* White card with a soft shadow. */
   .card {
     background: var(--color-card);
+    border: 1px solid color-mix(in srgb, var(--color-line) 75%, transparent);
     border-radius: var(--radius-xl);
     box-shadow: var(--shadow-card);
   }
@@ -195,6 +197,7 @@
     display: grid;
     overflow: hidden;
     background: var(--color-card);
+    border: 1px solid color-mix(in srgb, var(--color-line) 75%, transparent);
     border-radius: var(--radius-xl);
     box-shadow: var(--shadow-card);
   }
@@ -213,7 +216,7 @@
     padding: 0 0.9rem;
     border-radius: 999px;
     background: var(--color-card);
-    box-shadow: var(--shadow-card);
+    border: 1px solid var(--color-line);
     font-size: 0.8125rem;
     font-weight: 600;
     color: var(--color-muted);
@@ -226,6 +229,7 @@
   .seg > button[aria-pressed="true"],
   .seg > button[aria-selected="true"] {
     background: var(--color-brand);
+    border-color: var(--color-brand);
     color: var(--color-brand-fg);
   }
   /* Underlined tabs for the sections of a page. */
@@ -271,8 +275,8 @@
     color: var(--color-pine);
   }
   .tag-part {
-    background: var(--color-gold-soft);
-    color: #9a5b00;
+    background: #f3e7c9;
+    color: #7a5a12;
   }
   .tag-plain {
     background: var(--color-sand);
@@ -297,39 +301,45 @@ html[data-size="lg"] {
 }
 html[data-theme="dark"] {
   color-scheme: dark;
-  --color-paper: #0a1120;
-  --color-card: #121b2d;
-  --color-ink: #e8edf6;
-  --color-muted: #94a1b6;
-  --color-line: #223049;
-  --color-sand: #182338;
-  --color-brand: #2c5aa8;
-  --color-brand-2: #3a6cc4;
-  --color-brand-fg: #ffffff;
-  --color-brand-soft: #1a2a46;
-  --color-gold-soft: #3a2b10;
-  --color-pine: #4cc98a;
-  --color-pine-fg: #062014;
-  --color-rust: #f2877c;
-  --color-rust-fg: #2a0b08;
-  --shadow-card: 0 0 0 1px #1d2940;
+  --color-paper: #1a1714;
+  --color-card: #24201b;
+  --color-ink: #f4efe6;
+  --color-muted: #c2b8a9;
+  --color-line: #3f372e;
+  --color-sand: #332c25;
+  --color-brand: #2f6b55;
+  --color-brand-2: #3a7d64;
+  --color-brand-fg: #f3faf6;
+  --color-brand-soft: #22362d;
+  --color-gold: #c4693c;
+  --color-gold-fg: #fff7f2;
+  --color-gold-soft: #3a2519;
+  --color-pine: #8fceb0;
+  --color-pine-fg: #10241b;
+  --color-rust: #e08a5d;
+  --color-rust-fg: #2a140c;
+  --shadow-card: none;
 }
 html[data-theme="dark"] .navy {
-  background: linear-gradient(180deg, #0d1b33 0%, #16335f 100%);
+  background: linear-gradient(180deg, #173a2d 0%, #1e4d3c 100%);
 }
 html[data-theme="dark"] .navy-flat {
-  background: #0d1b33;
+  background: #173a2d;
 }
-/* Optional green brand (Settings → Appearance). */
+/* Optional rust brand (Settings → Appearance). */
 html[data-accent="pine"] {
-  --color-brand: #134d36;
-  --color-brand-2: #1d6b4c;
-  --color-brand-soft: #e3f0ea;
+  --color-brand: #8f3d16;
+  --color-brand-2: #a9512a;
+  --color-brand-fg: #fff7f2;
+  --color-brand-soft: #f6e3d8;
+  --color-gold: #1e4d3c;
+  --color-gold-fg: #f3faf6;
 }
 html[data-theme="dark"][data-accent="pine"] {
-  --color-brand: #1d6b4c;
-  --color-brand-2: #26825d;
-  --color-brand-soft: #16302a;
+  --color-brand: #a9512a;
+  --color-brand-2: #c4693c;
+  --color-brand-soft: #3a2519;
+  --color-gold: #2f6b55;
 }
 
 @media (prefers-reduced-motion: reduce) {

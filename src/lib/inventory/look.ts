@@ -55,7 +55,7 @@ export function writeLook(look: Look) {
 export function readableOn(hex: string): string {
   const v = parseInt(hex.slice(1), 16);
   const lum = (0.299 * (v >> 16) + 0.587 * ((v >> 8) & 255) + 0.114 * (v & 255)) / 255;
-  return lum > 0.6 ? "#16191d" : "#ffffff";
+  return lum > 0.6 ? "#1c1915" : "#fffdf8";
 }
 
 const CUSTOM_VARS = [
@@ -93,11 +93,11 @@ export function applyLook(look: Look) {
   }
   if (text) {
     root.style.setProperty("--color-ink", text);
-    root.style.setProperty("--color-muted", `color-mix(in srgb, ${text} 70%, ${background || (dark ? "#0a1120" : "#f4f6fa")} 30%)`);
+    root.style.setProperty("--color-muted", `color-mix(in srgb, ${text} 70%, ${background || (dark ? "#1a1714" : "#f3efe6")} 30%)`);
   }
   if (accent) {
     root.style.setProperty("--color-brand", accent);
     root.style.setProperty("--color-brand-fg", readableOn(accent));
-    root.style.setProperty("--color-brand-soft", `color-mix(in srgb, ${accent} 12%, ${background || (dark ? "#121b2d" : "#ffffff")})`);
+    root.style.setProperty("--color-brand-soft", `color-mix(in srgb, ${accent} 12%, ${background || (dark ? "#24201b" : "#fffdf8")})`);
   }
 }

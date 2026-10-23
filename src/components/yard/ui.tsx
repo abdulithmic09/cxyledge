@@ -16,7 +16,7 @@ export function Stat({
       <p className="label">{label}</p>
       <p
         className={cn(
-          "mt-0.5 text-xl font-bold tabular-nums",
+          "mt-0.5 font-display text-2xl tabular-nums",
           tone === "pine" && "text-pine",
           tone === "rust" && "text-rust",
         )}
@@ -36,7 +36,7 @@ export function Tally({ items, className }: { items: Array<{ label: string; valu
       {items.map((item) => (
         <div key={item.label}>
           <p className="label truncate">{item.label}</p>
-          <p className={cn("mt-0.5 truncate text-lg font-bold tabular-nums", item.tone === "pine" && "text-pine", item.tone === "rust" && "text-rust")}>{item.value}</p>
+          <p className={cn("mt-0.5 truncate font-display text-xl tabular-nums", item.tone === "pine" && "text-pine", item.tone === "rust" && "text-rust")}>{item.value}</p>
         </div>
       ))}
     </div>
@@ -48,7 +48,7 @@ export function PageHead({ title, detail, action }: { title: string; detail?: Re
   return (
     <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-2">
       <div className="min-w-0">
-        <h2 className="text-[1.375rem] font-bold leading-tight sm:text-2xl">{title}</h2>
+        <h2 className="text-[1.6rem] leading-tight sm:text-3xl">{title}</h2>
         {detail ? <p className="mt-0.5 text-sm text-muted">{detail}</p> : null}
       </div>
       {action ? <div className="flex shrink-0 gap-2">{action}</div> : null}
@@ -89,7 +89,7 @@ export function Panel({
     <section className={cn("card p-4 sm:p-5", className)}>
       {title ? (
         <div className="mb-3 flex items-center justify-between gap-3">
-          <h2 className="text-base font-bold leading-tight">{title}</h2>
+          <h2 className="text-xl leading-tight">{title}</h2>
           {action}
         </div>
       ) : null}
@@ -101,7 +101,7 @@ export function Panel({
 export function EmptyNote({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="card px-5 py-8 text-center">
-      <h2 className="text-base font-bold">{title}</h2>
+      <h2 className="text-xl">{title}</h2>
       <div className="mx-auto mt-1.5 max-w-md text-sm text-muted">{children}</div>
     </div>
   );

@@ -173,24 +173,24 @@ export function BookView({
     <div className="flex flex-col gap-3">
       <section className="navy -mx-4 -mt-4 px-5 pb-16 pt-4 lg:mx-0 lg:mt-0 lg:rounded-2xl lg:px-7 lg:pb-16 lg:pt-6">
         <p className="text-[0.8rem] font-medium text-white/70">To collect</p>
-        <p className="mt-0.5 text-[2.1rem] font-extrabold leading-none tracking-tight tabular-nums">{rupee(toCollect, 0)}</p>
+        <p className="mt-1 font-display text-[2.25rem] leading-none tabular-nums">{rupee(toCollect, 0)}</p>
         <p className="mt-2 flex items-center gap-1.5 text-xs text-white/70">
-          <span className="size-1.5 rounded-full bg-[#5ee0a0]" aria-hidden />
+          <span className="size-1.5 rounded-full bg-[#9fe0bf]" aria-hidden />
           {owing ? `from ${owing} ${owing === 1 ? "customer" : "customers"}` : "Nobody owes you"} · {entries.length} {entries.length === 1 ? "line" : "lines"}
           {synced ? ` · synced ${synced}` : ""}
         </p>
       </section>
       <div className="tally relative -mt-14 mx-1 grid-cols-3 text-center lg:mx-5">
         <div>
-          <p className="text-xl font-extrabold tabular-nums">{stillOut}</p>
+          <p className="font-display text-[1.35rem] tabular-nums">{stillOut}</p>
           <p className="text-[0.7rem] font-medium text-muted">Cylinders out</p>
         </div>
         <div>
-          <p className="text-xl font-extrabold tabular-nums text-pine">{backToday}</p>
+          <p className="font-display text-[1.35rem] tabular-nums text-pine">{backToday}</p>
           <p className="text-[0.7rem] font-medium text-muted">Back today</p>
         </div>
         <div>
-          <p className={cn("text-xl font-extrabold tabular-nums", owing && "text-rust")}>{owing}</p>
+          <p className={cn("font-display text-[1.35rem] tabular-nums", owing && "text-rust")}>{owing}</p>
           <p className="text-[0.7rem] font-medium text-muted">Owe you</p>
         </div>
       </div>
@@ -305,15 +305,15 @@ export function BookView({
                       >
                         <span
                           className={cn(
-                            "grid size-10 place-items-center rounded-xl",
-                            isReturn ? "bg-pine/10 text-pine" : entry.movement === "purchase" ? "bg-brand-soft text-brand" : "bg-gold-soft text-[#b86200]",
+                            "grid size-10 place-items-center rounded-full",
+                            isReturn ? "bg-pine/10 text-pine" : entry.movement === "purchase" ? "bg-brand-soft text-brand" : "bg-gold-soft text-gold",
                           )}
                           aria-label={WORD[entry.movement] ?? movementLabel(entry.movement)}
                         >
                           <Glyph className="size-[1.1rem]" strokeWidth={2.4} aria-hidden />
                         </span>
                         <span className="min-w-0">
-                          <span className="block truncate text-[0.95rem] font-bold">{entry.companyName}</span>
+                          <span className="block truncate text-[0.95rem] font-semibold">{entry.companyName}</span>
                           <span className="block truncate text-xs text-muted lg:hidden">
                             {WORD[entry.movement] ?? movementLabel(entry.movement)} {entry.quantity}
                             {entry.cylinderType ? ` × ${entry.cylinderType}` : ""}

@@ -223,7 +223,7 @@ export function CustomersView({
                   <button type="button" className="grid w-full grid-cols-[minmax(0,1fr)_4rem_6.5rem_1rem] items-center gap-3 px-4 py-3 text-left hover:bg-sand/60" onClick={() => setSelected(row.company)}>
                     <span className="min-w-0">
                       <span className="flex items-center gap-2">
-                        <span className="truncate font-bold">{row.company}</span>
+                        <span className="truncate font-semibold">{row.company}</span>
                         {overdue ? <span className="tag tag-due shrink-0">Late</span> : null}
                       </span>
                       <span className="block truncate text-xs text-muted">
@@ -302,17 +302,17 @@ function CompanyPage({
           <ChevronLeft className="size-4" aria-hidden /> Customers
         </button>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <h2 className="min-w-0 text-2xl font-extrabold leading-tight">{company}</h2>
+          <h2 className="min-w-0 text-[1.75rem] leading-tight">{company}</h2>
           {lateAmount ? <span className="rounded-md bg-[#ffd9d4] px-2 py-0.5 text-xs font-bold text-[#9c2219]">{rupee(lateAmount, 0)} late</span> : null}
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <p className="text-xs text-white/65">To collect</p>
-            <p className="text-[1.75rem] font-extrabold leading-tight tabular-nums">{rupee(balance.toCollect, 0)}</p>
+            <p className="font-display text-[1.85rem] leading-tight tabular-nums">{rupee(balance.toCollect, 0)}</p>
           </div>
           <div>
             <p className="text-xs text-white/65">Cylinders out</p>
-            <p className="text-[1.75rem] font-extrabold leading-tight tabular-nums">{balance.outstandingQty}</p>
+            <p className="font-display text-[1.85rem] leading-tight tabular-nums">{balance.outstandingQty}</p>
           </div>
         </div>
         {balance.byType.length || balance.outstandingSerials.length ? (

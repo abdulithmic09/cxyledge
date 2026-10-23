@@ -82,7 +82,7 @@ function BootScreen({ label }: { label: string }) {
   return (
     <main className="grid min-h-screen place-items-center bg-paper px-6 text-ink">
       <div className="flex flex-col items-center gap-3 text-center">
-        <span className="grid size-11 place-items-center rounded-xl bg-gold text-gold-fg">
+        <span className="grid size-11 place-items-center rounded-xl bg-ink text-paper">
           <Cylinder className="size-5" aria-hidden />
         </span>
         <p className="text-sm text-muted">{label}</p>
@@ -105,11 +105,11 @@ function SignedOut() {
       <div className="navy absolute inset-x-0 top-0 h-[42vh]" aria-hidden />
       <div className="relative w-full max-w-sm">
         <div className="mb-6 flex items-center gap-2.5 text-white">
-          <span className="grid size-10 place-items-center rounded-xl bg-gold text-gold-fg">
+          <span className="grid size-10 place-items-center rounded-xl bg-paper text-ink">
             <Cylinder className="size-5" aria-hidden />
           </span>
           <div>
-            <p className="text-lg font-bold leading-tight">Cxyledge</p>
+            <p className="font-display text-xl leading-tight">Cxyledge</p>
             <p className="text-xs text-white/70">Cylinder book for gas agencies</p>
           </div>
         </div>
@@ -225,17 +225,17 @@ function Shell({ userId }: { userId: string }) {
   return (
     <RoleContext.Provider value={role}>
     <div className="min-h-screen bg-paper text-ink">
-      <header className="no-print navy-flat sticky top-0 z-20">
+      <header className="no-print sticky top-0 z-20 border-b border-line bg-card">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 lg:px-6">
           <div className="flex min-w-0 items-center gap-2.5">
-            <span className="grid size-9 shrink-0 place-items-center rounded-[0.65rem] bg-gold text-gold-fg shadow-sm">
+            <span className="grid size-9 shrink-0 place-items-center rounded-[0.65rem] bg-ink text-paper">
               <Cylinder className="size-[1.1rem]" aria-hidden />
             </span>
             <p className="min-w-0 leading-tight">
-              <span className="block text-[0.95rem] font-bold">Cxyledge</span>
-              <span className="flex items-center gap-1.5 truncate text-xs text-white/70">
+              <span className="block font-display text-lg leading-none">Cxyledge</span>
+              <span className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-muted">
                 {yard?.name ?? "Shared yard"}
-                {yard && role !== "owner" ? <span className="shrink-0 rounded bg-white/15 px-1.5 py-px text-[0.65rem] font-semibold text-white">{ROLE_LABEL[role]}</span> : null}
+                {yard && role !== "owner" ? <span className="shrink-0 rounded bg-sand px-1.5 py-px text-[0.65rem] font-semibold text-ink">{ROLE_LABEL[role]}</span> : null}
               </span>
             </p>
           </div>
@@ -283,7 +283,7 @@ function Shell({ userId }: { userId: string }) {
                   aria-current={on ? "page" : undefined}
                   className={cn(
                     "flex h-10 items-center gap-2.5 rounded-xl px-3 text-left text-sm font-medium",
-                    on ? "bg-card font-bold text-ink shadow-card [&>svg]:text-gold" : "text-muted hover:bg-card/70 hover:text-ink",
+                    on ? "bg-card font-semibold text-ink shadow-card ring-1 ring-line [&>svg]:text-gold" : "text-muted hover:bg-card/70 hover:text-ink",
                   )}
                   onClick={() => {
                     setFocusCompany(null);
@@ -422,7 +422,7 @@ function Shell({ userId }: { userId: string }) {
                 aria-current={on ? "page" : undefined}
                 className={cn(
                   "relative flex min-h-[3.75rem] min-w-0 flex-1 flex-col items-center justify-center gap-1 text-[0.7rem] font-semibold",
-                  on ? "text-ink [&_svg]:text-gold" : "text-muted",
+                  on ? "text-gold" : "text-muted",
                 )}
                 onClick={() => {
                   setFocusCompany(null);

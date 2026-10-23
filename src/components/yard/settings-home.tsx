@@ -171,8 +171,8 @@ export function SettingsHome({ yard, entries, payments, onChanged }: { yard: Yar
                   <div className="seg" role="group" aria-label="Colour">
                     {(["rust", "pine"] as LookAccent[]).map((accent) => (
                       <button key={accent} type="button" aria-pressed={look.accent === accent} onClick={() => updateLook({ accent })}>
-                        <span className={cn("mr-1.5 inline-block size-2.5 rounded-full align-middle", accent === "rust" ? "bg-[#0f2747]" : "bg-[#1d5c45]")} aria-hidden />
-                        {accent === "rust" ? "Navy" : "Green"}
+                        <span className={cn("mr-1.5 inline-block size-2.5 rounded-full align-middle", accent === "rust" ? "bg-[#1e4d3c]" : "bg-[#8f3d16]")} aria-hidden />
+                        {accent === "rust" ? "Green" : "Rust"}
                       </button>
                     ))}
                   </div>
@@ -181,9 +181,9 @@ export function SettingsHome({ yard, entries, payments, onChanged }: { yard: Yar
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
                 {(
                   [
-                    ["background", "Background colour", "#f4f6fa"],
-                    ["text", "Text colour", "#0f1b2d"],
-                    ["accent", "Accent colour", "#0f2747"],
+                    ["background", "Background colour", "#f3efe6"],
+                    ["text", "Text colour", "#1c1915"],
+                    ["accent", "Accent colour", "#1e4d3c"],
                   ] as Array<[keyof LookColors, string, string]>
                 ).map(([key, label, fallback]) => (
                   <label key={key} className="flex items-center justify-between gap-3 rounded-lg border border-line px-3 py-2 text-sm">

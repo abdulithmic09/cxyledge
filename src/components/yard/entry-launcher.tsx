@@ -250,7 +250,7 @@ export function EntryLauncher({
       {!sheet ? (
         <button
           type="button"
-          className="no-print btn btn-gold fixed bottom-[4.75rem] right-4 z-30 h-[3.25rem] gap-1.5 rounded-2xl px-5 text-[0.95rem] font-extrabold lg:bottom-6 lg:right-6 lg:h-12"
+          className="no-print btn btn-gold fixed bottom-[4.75rem] right-4 z-30 h-[3.25rem] gap-1.5 rounded-full px-5 text-[0.95rem] font-semibold lg:bottom-6 lg:right-6 lg:h-12"
           onClick={() => setSheet({ key: Date.now(), mode: null, entry: null, company: "" })}
         >
           <Plus className="size-5" strokeWidth={2.75} aria-hidden />
@@ -260,7 +260,7 @@ export function EntryLauncher({
 
       {toast || undoNote ? (
         <div className="no-print fixed inset-x-3 bottom-[8.75rem] z-40 mx-auto max-w-md lg:inset-x-auto lg:bottom-24 lg:right-6 lg:w-[26rem]" role="status">
-          <div className="navy rounded-2xl text-sm shadow-xl shadow-black/25">
+          <div className="rounded-2xl bg-[#1c1915] text-sm text-[#f4efe6] shadow-xl shadow-black/25 dark:ring-1 dark:ring-line">
             <div className="flex items-start gap-2 py-2.5 pl-3.5 pr-1.5">
               <span className="min-w-0 flex-1 pt-1">{toast ? toast.text : undoNote}</span>
               <button type="button" className="grid size-8 shrink-0 place-items-center rounded-md text-white/70 hover:bg-white/10 hover:text-white" aria-label="Dismiss" onClick={() => (toast ? setToast(null) : setUndoNote(""))}>
@@ -268,7 +268,7 @@ export function EntryLauncher({
               </button>
             </div>
             {toast ? (
-              <div className="flex flex-wrap gap-x-1 border-t border-white/10 px-1.5 py-1 [&>button]:h-9 [&>button]:rounded-md [&>button]:px-2 [&>button]:font-semibold [&>button]:text-gold [&>button]:no-underline [&>button:hover]:bg-white/10">
+              <div className="flex flex-wrap gap-x-1 border-t border-white/10 px-1.5 py-1 [&>button]:h-9 [&>button]:rounded-md [&>button]:px-2 [&>button]:font-semibold [&>button]:text-[#f0b48f] [&>button]:no-underline [&>button:hover]:bg-white/10">
                 {toast.billFor ? (
                   <button type="button" className="" disabled={billing} onClick={() => void makeBill(toast.billFor!)}>
                     {billing ? "Opening…" : "Make bill"}
@@ -645,7 +645,7 @@ function EntrySheet({
           ) : (
             <span className="w-2" />
           )}
-          <h2 className="min-w-0 flex-1 truncate text-lg font-bold">{title}</h2>
+          <h2 className="min-w-0 flex-1 truncate text-xl">{title}</h2>
           <button type="button" className="grid size-11 place-items-center rounded-xl hover:bg-white/10" aria-label="Close" onClick={requestClose}>
             <X className="size-5" aria-hidden />
           </button>
@@ -671,11 +671,11 @@ function EntrySheet({
                 return (
                   <li key={item.id} className="card overflow-hidden">
                     <button type="button" className="flex w-full items-center gap-3.5 px-4 py-3.5 text-left hover:bg-sand/60 focus-visible:bg-sand" onClick={() => choose(item.id)}>
-                      <span className={cn("grid size-11 shrink-0 place-items-center rounded-xl", item.id === "money" ? "bg-pine/10 text-pine" : item.id === "take" ? "bg-pine/10 text-pine" : item.id === "bought" ? "bg-brand-soft text-brand" : "bg-gold-soft text-[#b86200]")}>
+                      <span className={cn("grid size-11 shrink-0 place-items-center rounded-full", item.id === "money" ? "bg-pine/10 text-pine" : item.id === "take" ? "bg-pine/10 text-pine" : item.id === "bought" ? "bg-brand-soft text-brand" : "bg-gold-soft text-gold")}>
                         <Icon className="size-5" strokeWidth={2.2} aria-hidden />
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block font-bold leading-tight">{item.title}</span>
+                        <span className="block font-semibold leading-tight">{item.title}</span>
                         <span className="block text-xs text-muted">{item.hint}</span>
                       </span>
                       <ChevronRight className="size-4 shrink-0 text-muted" aria-hidden />
@@ -789,7 +789,7 @@ function Section({ title, tone, plain, children }: { title: string; tone?: "pine
   if (plain) return <div className="grid gap-3">{children}</div>;
   return (
     <section className="card p-3 sm:p-4">
-      <h3 className={cn("label mb-3 flex items-center gap-2", tone === "pine" ? "text-pine" : tone === "rust" ? "text-[#b86200]" : "")}>
+      <h3 className={cn("label mb-3 flex items-center gap-2", tone === "pine" ? "text-pine" : tone === "rust" ? "text-gold" : "")}>
         <span className={cn("size-2 rounded-full", tone === "pine" ? "bg-pine" : "bg-gold")} aria-hidden />
         {title}
       </h3>

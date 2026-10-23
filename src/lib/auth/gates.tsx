@@ -101,9 +101,9 @@ export function UserButton() {
   if (!user) return null;
   const label = user.displayName ?? user.primaryEmail ?? "Account";
   const avatar = user.profileImageUrl ? (
-    <img src={user.profileImageUrl} alt="" className="size-9 rounded-full object-cover ring-1 ring-white/30" />
+    <img src={user.profileImageUrl} alt="" className="size-9 rounded-full object-cover ring-1 ring-line" />
   ) : (
-    <span className="grid size-9 place-items-center rounded-full bg-white/15 text-sm font-bold text-white ring-1 ring-white/20">{label.charAt(0).toUpperCase()}</span>
+    <span className="grid size-9 place-items-center rounded-full bg-sand text-sm font-semibold text-ink">{label.charAt(0).toUpperCase()}</span>
   );
   return (
     <details className="relative" onBlur={(event) => {
