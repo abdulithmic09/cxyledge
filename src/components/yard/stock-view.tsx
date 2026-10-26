@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ClipboardCheck, Search, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, ClipboardCheck, Search, Trash2 } from "lucide-react";
 import { deletePayment, listCompanyMeta, saveDocument, type Entry, type Payment, type YardInfo } from "@/lib/inventory/api";
 import { companyBalances, type CompanyBalance } from "@/lib/inventory/analyse";
 import { createHoldingCharge, deleteStockMove, getTracking, saveHoldTerms, saveStockMove, type StockMove, type StockMoveKind } from "@/lib/inventory/tracking";
@@ -35,15 +35,7 @@ const EVENT_WORD: Record<CylinderEvent["kind"], string> = {
   from_plant: "Back full from plant",
 };
 
-/** Yard stock, refilling plant, cylinder lookup and holding charges. */
-type StockTab = "plant" | "count" | "find" | "holding";
-const STOCK_TABS: Array<{ id: StockTab; label: string }> = [
-  { id: "plant", label: "Plant trips" },
-  { id: "count", label: "Stock count" },
-  { id: "find", label: "Find a cylinder" },
-  { id: "holding", label: "Holding charges" },
-];
-let lastStockTab: StockTab = "plant";
+/** Stock: what you have, find a cylinder, holding charges. Plant trips and hand counts sit under "More". */
 let cylinderAsk: string | null = null;
 const peekCylinder = () => {
   if (!cylinderAsk) cylinderAsk = takeCylinderRequest();
@@ -60,25 +52,29 @@ export function StockView({ yard, entries, payments, onChanged }: { yard: YardIn
     void client.invalidateQueries({ queryKey: ["tracking"] });
     onChanged();
   };
-  const [tab, setTabState] = useState<StockTab>(() => (peekCylinder() ? "find" : lastStockTab));
+  const { canEdit } = useRole();
   const [counting, setCounting] = useState(false);
-  const setTab = (next: StockTab) => {
-    lastStockTab = next;
-    setTabState(next);
-  };
-  const totals = rows.reduce((sum, row) => ({ full: sum.full + row.full, empty: sum.empty + row.empty, plant: sum.plant + row.plant, customers: sum.customers + row.customers }), { full: 0, empty: 0, plant: 0, customers: 0 });
+  const [more, setMore] = useState(false);
+  peekCylinder();
+  const active = rows.filter((row) => row.countedOn || row.full || row.empty || row.plant || row.customers);
+  const needsCount = active.some((row) => !row.countedOn || row.full < 0 || row.empty < 0);
+  const totals = active.reduce((sum, row) => ({ full: sum.full + Math.max(0, row.full), empty: sum.empty + Math.max(0, row.empty), plant: sum.plant + row.plant, customers: sum.customers + row.customers }), { full: 0, empty: 0, plant: 0, customers: 0 });
 
   return (
     <div className="flex flex-col gap-3">
-      <PageHead title="Stock" detail="Cylinders at the yard, the plant and with customers" />
-      <Tally
-        items={[
-          { label: "Full at yard", value: totals.full, tone: totals.full < 0 ? "rust" : undefined },
-          { label: "Empty at yard", value: totals.empty, tone: totals.empty < 0 ? "rust" : undefined },
-          { label: "At the plant", value: totals.plant },
-          { label: "With customers", value: totals.customers },
-        ]}
+      <PageHead
+        title="Stock"
+        detail="What you have right now"
+        action={
+          canEdit && !counting ? (
+            <button type="button" className="btn btn-pine gap-1.5" onClick={() => setCounting(true)}>
+              <ClipboardCheck className="size-4" aria-hidden /> Count stock
+            </button>
+          ) : undefined
+        }
       />
+
+      <FindCylinder entries={entries} moves={moves} />
 
       {counting ? (
         <CountWizard
@@ -91,92 +87,98 @@ export function StockView({ yard, entries, payments, onChanged }: { yard: YardIn
           }}
         />
       ) : (
-        <StockTable rows={rows} onCount={() => setCounting(true)} />
+        <>
+          <Tally
+            items={[
+              { label: "Full", value: totals.full, tone: "pine" },
+              { label: "Empty", value: totals.empty },
+              { label: "Customers", value: totals.customers, tone: "rust" },
+            ]}
+          />
+          {needsCount && canEdit ? (
+            <button type="button" className="card flex items-center gap-3 px-4 py-3 text-left hover:bg-sand" onClick={() => setCounting(true)}>
+              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-gold-soft text-gold">
+                <ClipboardCheck className="size-5" aria-hidden />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-semibold">Count your yard once</span>
+                <span className="block text-sm text-muted">Tell the app how many full and empty cylinders you have. After that it keeps the numbers right by itself.</span>
+              </span>
+              <ChevronRight className="size-4 shrink-0 text-muted" aria-hidden />
+            </button>
+          ) : null}
+          <GasList rows={rows} />
+        </>
       )}
 
-      <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0" role="tablist" aria-label="Stock tasks">
-        <div className="tabs">
-          {STOCK_TABS.map((item) => (
-            <button key={item.id} type="button" role="tab" aria-selected={tab === item.id} onClick={() => setTab(item.id)}>
-              {item.label}
-            </button>
-          ))}
-        </div>
-      </div>
-      {tab === "plant" ? (
+      <HoldingPanel yard={yard} entries={entries} payments={payments} tracking={tracking.data} onChanged={refresh} />
+
+      <section className="card">
+        <button type="button" className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left" aria-expanded={more} onClick={() => setMore((open) => !open)}>
+          <span>
+            <span className="block font-semibold">More stock tools</span>
+            <span className="block text-sm text-muted">Plant trips, and typing a count by hand</span>
+          </span>
+          <ChevronDown className={cn("size-4 shrink-0 text-muted transition-transform", more && "rotate-180")} aria-hidden />
+        </button>
+      </section>
+      {more ? (
         <>
           <PlantsSummary moves={moves} balances={balances} />
           <PlantPanel yard={yard} moves={moves} onSaved={refresh} />
+          <CountPanel yard={yard} onSaved={refresh} />
           <MovesList moves={moves} onChanged={refresh} />
         </>
       ) : null}
-      {tab === "count" ? <CountPanel yard={yard} onSaved={refresh} /> : null}
-      {tab === "find" ? <FindCylinder entries={entries} moves={moves} /> : null}
-      {tab === "holding" ? <HoldingPanel yard={yard} entries={entries} payments={payments} tracking={tracking.data} onChanged={refresh} /> : null}
     </div>
   );
 }
 
-function StockTable({ rows: all, onCount }: { rows: ReturnType<typeof yardStock>; onCount: () => void }) {
-  const { canEdit } = useRole();
+/** One card per gas: full and empty in the yard, and with customers. */
+function GasList({ rows: all }: { rows: ReturnType<typeof yardStock> }) {
   const [showAll, setShowAll] = useState(false);
   const active = all.filter((row) => row.countedOn || row.full || row.empty || row.plant || row.customers);
-  const rows = showAll || !active.length ? all : active;
-  const uncounted = active.length === 0 || active.some((row) => !row.countedOn);
+  const rows = showAll ? all : active;
+  if (!active.length && !showAll) {
+    return (
+      <p className="card px-4 py-6 text-center text-sm text-muted">
+        No cylinders yet. Count your yard, or give cylinders to a customer, and they show up here.
+      </p>
+    );
+  }
   return (
-    <Panel title="By gas type">
-      {uncounted ? (
-        <div className="mb-3 flex flex-col gap-2 rounded-md border border-line bg-sand px-3 py-2.5 text-sm sm:flex-row sm:items-center">
-          <p className="min-w-0 flex-1">
-            {all.some((row) => row.full < 0 || row.empty < 0) ? "Numbers below zero mean the yard hasn't been counted yet. " : ""}
-            Count it once; after that the book keeps it right.
-          </p>
-          {canEdit ? (
-            <button type="button" className="btn btn-pine h-9 min-h-0 w-fit gap-1.5 px-3 text-sm" onClick={onCount}>
-              <ClipboardCheck className="size-4" aria-hidden /> Start stock count
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-      <div className="-mx-1 overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-line text-left text-xs text-muted">
-              <th className="px-1 py-2 font-semibold">Gas type</th>
-              <th className="px-1 py-2 text-right font-semibold">Full</th>
-              <th className="px-1 py-2 text-right font-semibold">Empty</th>
-              <th className="px-1 py-2 text-right font-semibold">Plant</th>
-              <th className="px-1 py-2 text-right font-semibold" title="With customers">Out</th>
-              <th className="px-1 py-2 text-right font-semibold">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => {
-              const total = row.full + row.empty + row.plant + row.customers;
-              return (
-                <tr key={row.type} className="border-b border-line/60">
-                  <td className="px-1 py-2">
-                    <span className="font-medium">{row.type}</span>
-                    <span className="block text-xs text-muted">{row.countedOn ? `Counted ${dmy(row.countedOn)}` : "Not counted yet"}</span>
-                  </td>
-                  <td className={cn("px-1 py-2 text-right tabular-nums", row.full < 0 && "font-semibold text-rust")}>{row.full}</td>
-                  <td className={cn("px-1 py-2 text-right tabular-nums", row.empty < 0 && "font-semibold text-rust")}>{row.empty}</td>
-                  <td className="px-1 py-2 text-right tabular-nums">{row.plant}</td>
-                  <td className="px-1 py-2 text-right tabular-nums">{row.customers}</td>
-                  <td className="px-1 py-2 text-right font-semibold tabular-nums">{total}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+    <section className="card overflow-hidden">
+      <div className="label grid grid-cols-[minmax(0,1fr)_3rem_3.2rem_4.8rem] gap-2 border-b border-line bg-sand/50 px-4 py-2.5 text-right">
+        <span className="text-left">Gas</span>
+        <span>Full</span>
+        <span>Empty</span>
+        <span>Customers</span>
       </div>
-      {all.length > active.length && active.length ? (
-        <button type="button" className="btn btn-ghost mt-3 h-9 px-3 text-sm" onClick={() => setShowAll((value) => !value)}>
-          {showAll ? "Show only gas types in use" : `Show all ${all.length} gas types`}
+      <ul>
+        {rows.map((row) => {
+          const off = row.full < 0 || row.empty < 0;
+          return (
+            <li key={row.type} className="grid grid-cols-[minmax(0,1fr)_3rem_3.2rem_4.8rem] items-center gap-2 border-b border-line px-4 py-3 text-right last:border-b-0">
+              <span className="min-w-0 text-left">
+                <span className="block font-semibold leading-snug">{row.type}</span>
+                <span className={cn("block text-xs", off || !row.countedOn ? "text-gold" : "text-muted")}>
+                  {off ? "Count needed" : row.countedOn ? `Counted ${dmy(row.countedOn)}` : "Not counted yet"}
+                  {row.plant ? ` · ${row.plant} at plant` : ""}
+                </span>
+              </span>
+              <span className={cn("font-display text-lg tabular-nums", off ? "text-muted" : "text-pine")}>{off ? "–" : row.full}</span>
+              <span className={cn("font-display text-lg tabular-nums", off && "text-muted")}>{off ? "–" : row.empty}</span>
+              <span className="font-display text-lg tabular-nums">{row.customers}</span>
+            </li>
+          );
+        })}
+      </ul>
+      {all.length > active.length ? (
+        <button type="button" className="w-full border-t border-line px-4 py-2.5 text-sm font-medium text-muted hover:bg-sand" onClick={() => setShowAll((value) => !value)}>
+          {showAll ? "Show only gases in use" : `Show all ${all.length} gas types`}
         </button>
       ) : null}
-      {rows.some((row) => row.full < 0 || row.empty < 0) ? <p className="mt-2 text-xs text-rust">Below zero: more went out than was counted in. Count that gas again.</p> : null}
-    </Panel>
+    </section>
   );
 }
 
@@ -328,7 +330,7 @@ function CountPanel({ yard, onSaved }: { yard: YardInfo; onSaved: () => void }) 
   }
 
   return (
-    <Panel title="Stock count">
+    <Panel title="Type a count by hand">
       <p className="mb-3 text-sm text-muted">Count what is physically at the yard for one gas type. The yard numbers start again from this count.</p>
       {canEdit ? (
         <div className="grid gap-3">
@@ -438,6 +440,8 @@ function HoldingPanel({
   const [open, setOpen] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<Note>(null);
+  const [editTerms, setEditTerms] = useState(false);
+  const [showAllRows, setShowAllRows] = useState(false);
   const terms = tracking?.terms ?? { freeDays: 30, rate: 0 };
   const charges = payments.filter((payment) => payment.direction === "charge");
   const totalDue = rows.reduce((sum, row) => sum + row.amount, 0);
@@ -499,11 +503,22 @@ function HoldingPanel({
   }
 
   return (
-    <Panel title="Holding charges">
+    <Panel
+      title="Holding charges"
+      action={
+        isOwner && terms.rate > 0 && !editTerms ? (
+          <button type="button" className="btn btn-ghost h-9 min-h-0 px-3 text-sm" onClick={() => setEditTerms(true)}>
+            Change terms
+          </button>
+        ) : undefined
+      }
+    >
       <p className="text-sm text-muted">
-        Cylinders kept longer than the free period are charged per cylinder per day. {terms.rate > 0 ? `Now: ${terms.freeDays} free days, then ${rupee(terms.rate)} per cylinder per day.` : "Charges are off until you set a daily rate."}
+        {terms.rate > 0
+          ? `Customers who keep cylinders more than ${terms.freeDays} days pay ${rupee(terms.rate)} per cylinder for each extra day.`
+          : "Charge customers who keep cylinders too long. Set the free days and a daily rate to start."}
       </p>
-      {isOwner ? (
+      {isOwner && (terms.rate <= 0 || editTerms) ? (
         <div className="mt-3 flex flex-wrap items-end gap-3">
           <Field label="Free days">
             <input className="field w-28 tabular-nums" inputMode="numeric" value={free ?? String(terms.freeDays)} onChange={(event) => setFree(event.target.value.replace(/[^\d]/g, ""))} />
@@ -511,29 +526,46 @@ function HoldingPanel({
           <Field label="₹ per cylinder per day">
             <input className="field w-36 tabular-nums" inputMode="decimal" value={rate ?? String(terms.rate)} onChange={(event) => setRate(event.target.value.replace(/[^\d.]/g, ""))} />
           </Field>
-          <button type="button" className="btn btn-pine" disabled={busy || (free == null && rate == null)} onClick={() => void saveTerms()}>
-            Save terms
+          <button
+            type="button"
+            className="btn btn-pine"
+            disabled={busy || (free == null && rate == null)}
+            onClick={() => void saveTerms().then(() => setEditTerms(false))}
+          >
+            Save
           </button>
+          {editTerms ? (
+            <button type="button" className="btn btn-ghost" onClick={() => setEditTerms(false)}>
+              Cancel
+            </button>
+          ) : null}
         </div>
       ) : null}
       <StatusNote note={status} />
-      {totalDue > 0 ? <p className="mt-3 text-sm font-semibold">Not billed yet: {rupee(totalDue)} across {rows.filter((row) => row.amount > 0).length} companies.</p> : null}
+      {totalDue > 0 ? <p className="mt-3 text-sm font-semibold">To bill: {rupee(totalDue)} from {rows.filter((row) => row.amount > 0).length} {rows.filter((row) => row.amount > 0).length === 1 ? "customer" : "customers"}</p> : null}
       <ul className="mt-3 divide-y divide-line">
         {rows.length === 0 ? <li className="py-3 text-sm text-muted">No cylinders are with customers right now.</li> : null}
-        {rows.map((row) => (
+        {rows.length > 0 && !rows.some((row) => row.overFree > 0) && !showAllRows ? (
+          <li className="py-3 text-sm text-muted">Nobody has kept cylinders past {terms.freeDays} days.</li>
+        ) : null}
+        {rows.filter((row) => showAllRows || row.overFree > 0).map((row) => (
           <li key={row.company} className="py-3">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <button type="button" className="min-w-0 text-left" onClick={() => setOpen(open === row.company ? null : row.company)} aria-expanded={open === row.company}>
                 <p className="font-semibold">{row.company}</p>
                 <p className="text-xs text-muted">
-                  {row.cylinders} out · {row.overFree} past {row.terms.freeDays} free days
+                  {row.cylinders} with them · {row.overFree} kept over {row.terms.freeDays} days · tap for details
                   {row.lastBilled ? ` · billed up to ${dmy(row.lastBilled)}` : ""}
                   {tracking?.companyTerms[row.company] ? " · own terms" : ""}
                 </p>
               </button>
-              <div className="text-right">
-                <p className={cn("font-semibold tabular-nums", row.amount > 0 ? "text-rust" : "text-muted")}>{rupee(row.amount)}</p>
-                <p className="text-xs text-muted">{row.cylinderDays} cylinder-days</p>
+              <div className="flex items-center gap-2">
+                <p className={cn("font-semibold tabular-nums", row.amount > 0 ? "text-rust" : "text-muted")}>{rupee(row.amount, 0)}</p>
+                {canEdit && row.amount > 0 ? (
+                  <button type="button" className="btn btn-rust h-9 min-h-0 px-3 text-sm" disabled={busy} onClick={() => void bill(row)}>
+                    Bill
+                  </button>
+                ) : null}
               </div>
             </div>
             {open === row.company ? (
@@ -558,16 +590,16 @@ function HoldingPanel({
                     onSave={(next) => void saveTerms(row.company, next)}
                   />
                 ) : null}
-                {canEdit && row.amount > 0 ? (
-                  <button type="button" className="btn btn-rust w-fit" disabled={busy} onClick={() => void bill(row)}>
-                    Bill {rupee(row.amount)} holding charges
-                  </button>
-                ) : null}
               </div>
             ) : null}
           </li>
         ))}
       </ul>
+      {rows.some((row) => row.overFree <= 0) ? (
+        <button type="button" className="mt-1 text-sm font-medium text-muted underline-offset-2 hover:underline" onClick={() => setShowAllRows((value) => !value)}>
+          {showAllRows ? "Show only customers to charge" : `Show all ${rows.length} ${rows.length === 1 ? "customer" : "customers"} with cylinders`}
+        </button>
+      ) : null}
       {charges.length ? (
         <div className="mt-4 border-t border-line pt-3">
           <p className="text-sm font-semibold">Billed holding charges</p>
@@ -698,7 +730,7 @@ function CountWizard({ rows, types, onClose, onSaved }: { rows: ReturnType<typeo
   }
 
   return (
-    <Panel title="Stock count">
+    <Panel title="Count stock">
       <div className="mb-3 flex items-center justify-between gap-2 text-sm text-muted">
         <span>{done ? "Check and save" : `Gas ${step + 1} of ${list.length}`} · {dmy(date)}</span>
         <button type="button" className="underline" onClick={onClose}>
@@ -732,13 +764,12 @@ function CountWizard({ rows, types, onClose, onSaved }: { rows: ReturnType<typeo
               {value.full === "" && value.empty === "" ? "Skip this gas" : "Next"}
             </button>
           </div>
-          <div className="flex flex-wrap items-end gap-2 border-t border-line pt-3">
-            <div className="min-w-0 flex-1">
-              <TypePicker value={adding} types={types} onChange={setAdding} />
-            </div>
+          <div className="grid gap-2 border-t border-line pt-3">
+            <p className="text-sm font-medium">Another gas in your yard that isn&apos;t listed?</p>
+            <TypePicker value={adding} types={types} onChange={setAdding} />
             <button
               type="button"
-              className="btn btn-ghost"
+              className="btn btn-ghost w-full sm:w-fit"
               disabled={!adding || list.includes(adding)}
               onClick={() => {
                 setList([...list, adding]);
