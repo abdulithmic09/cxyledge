@@ -32,6 +32,11 @@ export type OpenOrder = {
   leftSerials: string[];
 };
 
+/** Refill charges from a plant trip: money owed to the plant, not cylinders bought. */
+export function isRefill(entry: Pick<Entry, "movement" | "parentId">): boolean {
+  return entry.movement === "purchase" && Boolean(entry.parentId?.startsWith("plant:"));
+}
+
 export function moneyGap(entry: Entry): number {
   return Math.max(0, (entry.amountDue ?? 0) - (entry.amountPaid ?? 0));
 }
@@ -94,7 +99,7 @@ export function companyBalances(entries: Entry[], payments: Payment[] = []): Com
       company,
       delivered: deliveredQty,
       returned: returnedQty,
-      purchased: sumQty(purchased),
+      purchased: sumQty(purchased.filter((entry) => !isRefill(entry))),
       outstandingQty: Math.max(0, deliveredQty - returnedQty),
       outstandingSerials: consumeSerials(issuedSerials, returnedSerials),
       byType,
@@ -176,7 +181,7 @@ export function totalsFor(entries: Entry[], today = todayISO(), payments: Paymen
   for (const entry of entries) {
     if (entry.movement === "delivery") totals.delivered += entry.quantity;
     if (entry.movement === "return") totals.returned += entry.quantity;
-    if (entry.movement === "purchase") totals.purchased += entry.quantity;
+    if (entry.movement === "purchase" && !isRefill(entry)) totals.purchased += entry.quantity;
     if (entry.movement === "return") continue;
     totals.billed += entry.amountDue ?? 0;
     totals.paid += entry.amountPaid ?? 0;
@@ -225,7 +230,7 @@ export function movementSeries(entries: Entry[], from: string, to: string): Seri
       if (entry.entryDate >= start && entry.entryDate <= end) {
         if (entry.movement === "delivery") delivered += entry.quantity;
         if (entry.movement === "return") returned += entry.quantity;
-        if (entry.movement === "purchase") purchased += entry.quantity;
+        if (entry.movement === "purchase" && !isRefill(entry)) purchased += entry.quantity;
       }
       if (entry.entryDate <= end) {
         if (entry.movement === "delivery") outQty += entry.quantity;
@@ -315,11 +320,12 @@ export function companyLedger(entries: Entry[], payments: Payment[], company: st
   for (const entry of entries) {
     if (entry.companyName !== company || entry.movement === "return") continue;
     const what = `${entry.quantity}${entry.cylinderType ? ` × ${entry.cylinderType}` : " cylinders"}${entry.billNo ? ` · bill ${entry.billNo}` : ""}`;
+    const buyWord = isRefill(entry) ? "Refill charges" : "Purchase";
     if (entry.movement === "delivery") {
       if (entry.amountDue) rows.push({ key: `${entry.id}-d`, date: entry.entryDate, particulars: `Delivery ${what}`, debit: entry.amountDue, credit: 0, kind: "bill", sort: `${entry.entryDate}${entry.updatedAt}a` });
       if (entry.amountPaid) rows.push({ key: `${entry.id}-p`, date: entry.entryDate, particulars: `Received with bill${entry.billNo ? ` ${entry.billNo}` : ""}`, debit: 0, credit: entry.amountPaid, kind: "payment", sort: `${entry.entryDate}${entry.updatedAt}b` });
     } else {
-      if (entry.amountDue) rows.push({ key: `${entry.id}-d`, date: entry.entryDate, particulars: `Purchase ${what}`, debit: 0, credit: entry.amountDue, kind: "purchase", sort: `${entry.entryDate}${entry.updatedAt}a` });
+      if (entry.amountDue) rows.push({ key: `${entry.id}-d`, date: entry.entryDate, particulars: `${buyWord} ${what}`, debit: 0, credit: entry.amountDue, kind: "purchase", sort: `${entry.entryDate}${entry.updatedAt}a` });
       if (entry.amountPaid) rows.push({ key: `${entry.id}-p`, date: entry.entryDate, particulars: `Paid with purchase${entry.billNo ? ` ${entry.billNo}` : ""}`, debit: entry.amountPaid, credit: 0, kind: "payment", sort: `${entry.entryDate}${entry.updatedAt}b` });
     }
   }

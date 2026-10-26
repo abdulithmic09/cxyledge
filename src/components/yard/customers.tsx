@@ -149,7 +149,7 @@ export function CustomersView({
       />
       {showShare ? (
         <div className="card p-3">
-          <ExportBar title="Cxyledge balance summary" filename="cxyledge-balance" lines={lines} csv={csv} />
+          <ExportBar title={`${yard.name}: balance summary`} filename="cxyledge-balance" lines={lines} csv={csv} />
         </div>
       ) : null}
       <Tally

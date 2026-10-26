@@ -117,13 +117,11 @@ export function addDays(iso: string, n: number): string {
   return todayISO(dt);
 }
 
+/** "Mon, 26/10/2026" — weekday plus DD/MM/YYYY. */
 export function formatDay(iso: string): string {
-  return parseISODate(iso).toLocaleDateString("en-IN", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  const d = parseISODate(iso);
+  const weekday = d.toLocaleDateString("en-IN", { weekday: "short" });
+  return `${weekday}, ${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
 }
 
 export function formatShort(iso: string): string {

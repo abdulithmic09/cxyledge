@@ -105,7 +105,7 @@ export function UsersView({ yardName }: { yardName: string }) {
         items={[
           { label: "People", value: people.length },
           { label: "Active now", value: activeNow, tone: activeNow ? "pine" : undefined },
-          { label: "Changes logged", value: log.length },
+          { label: "Changes", value: log.length },
         ]}
       />
 

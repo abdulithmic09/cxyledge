@@ -123,19 +123,55 @@ export async function shareBlob(filename: string, blob: Blob, title: string): Pr
   return "saved";
 }
 
-export function printLines(title: string, lines: string[]) {
-  const escape = (value: string) =>
-    value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escape(title)}</title>
-    <style>body{font-family:Georgia,serif;color:#1c1915;padding:32px} h1{font-size:22px;margin:0 0 8px} p{color:#5e574e} pre{white-space:pre-wrap;font-family:inherit;font-size:14px}</style>
-    </head><body><h1>${escape(title)}</h1><p>Cxyledge</p><pre>${lines.map(escape).join("\n")}</pre></body></html>`;
-  const popup = window.open("", "_blank", "noopener,noreferrer");
-  if (!popup) return false;
-  popup.document.write(html);
-  popup.document.close();
-  popup.focus();
-  popup.print();
+/** Print a ready-made HTML page from a hidden frame (no pop-up needed, and the app's screen layout isn't used). */
+export function printHtml(html: string): boolean {
+  if (typeof document === "undefined") return false;
+  const frame = document.createElement("iframe");
+  frame.setAttribute("aria-hidden", "true");
+  frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
+  document.body.appendChild(frame);
+  const doc = frame.contentDocument;
+  if (!doc || !frame.contentWindow) {
+    frame.remove();
+    return false;
+  }
+  doc.open();
+  doc.write(html);
+  doc.close();
+  const go = () => {
+    frame.contentWindow?.focus();
+    frame.contentWindow?.print();
+    window.setTimeout(() => frame.remove(), 60_000);
+  };
+  const img = doc.querySelector("img");
+  if (img && !img.complete) img.addEventListener("load", go, { once: true });
+  else window.setTimeout(go, 150);
   return true;
+}
+
+export function escapeHtml(value: string) {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+/** A clean A4 page of report lines (balance summary, ledger, payments, activity). */
+export function printLines(title: string, lines: string[]) {
+  const now = new Date();
+  const printed = `${now.toLocaleDateString("en-GB", { timeZone: "Asia/Kolkata" })}, ${now.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", minute: "2-digit" })}`;
+  const body = lines
+    .map((line) => (line.trim() ? `<div class="row">${escapeHtml(line).replace(/\t/g, "&emsp;")}</div>` : '<div class="gap"></div>'))
+    .join("");
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
+<style>
+@page{size:A4;margin:14mm 14mm 16mm}
+*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{margin:0;font-family:"Helvetica Neue",Arial,sans-serif;color:#1c1915;font-size:10.5pt;line-height:1.45}
+h1{font-family:Georgia,"Times New Roman",serif;font-size:17pt;color:#1e4d3c;margin:0 0 2px}
+.meta{font-size:9pt;color:#6b6257;border-bottom:2.5px solid #1e4d3c;padding-bottom:8px;margin-bottom:10px}
+.row{padding:4px 2px;border-bottom:1px solid #ece5d8;white-space:pre-wrap;break-inside:avoid}
+.gap{height:10px}
+footer{margin-top:16px;padding-top:6px;border-top:1px solid #e4dccd;font-size:8.5pt;color:#6b6257}
+</style></head><body><h1>${escapeHtml(title)}</h1><div class="meta">Printed ${escapeHtml(printed)}</div>${body}<footer>Made with Cxyledge</footer></body></html>`;
+  return printHtml(html);
 }
 
 export function csvBlob(csv: string): Blob {

@@ -290,7 +290,7 @@ export function BackupPanel({ yard, entriesCsv, paymentsCsv, onChanged }: { yard
             type="button"
             role="switch"
             aria-checked={auto}
-            className="btn btn-ghost mt-3 w-full justify-between sm:w-auto sm:gap-4"
+            className="btn btn-ghost mt-3 h-auto min-h-11 w-full justify-between gap-3 whitespace-normal py-2.5 text-left sm:w-auto sm:gap-4"
             onClick={() => {
               const next = !auto;
               setAuto(next);
@@ -298,7 +298,7 @@ export function BackupPanel({ yard, entriesCsv, paymentsCsv, onChanged }: { yard
             }}
           >
             Download a backup automatically every week on this device
-            <span className={auto ? "inline-flex h-7 w-12 items-center rounded-full bg-pine p-1" : "inline-flex h-7 w-12 items-center rounded-full bg-line p-1"}>
+            <span className={auto ? "inline-flex h-7 w-12 shrink-0 items-center rounded-full bg-pine p-1" : "inline-flex h-7 w-12 shrink-0 items-center rounded-full bg-line p-1"}>
               <span className={auto ? "ml-auto size-5 rounded-full bg-card" : "size-5 rounded-full bg-card"} />
             </span>
           </button>

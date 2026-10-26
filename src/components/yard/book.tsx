@@ -11,7 +11,7 @@ import {
   type PaymentStatus,
   type ReturnLog,
 } from "@/lib/inventory/api";
-import { companyBalances, movementLabel, paymentLabel } from "@/lib/inventory/analyse";
+import { companyBalances, isRefill, movementLabel, paymentLabel } from "@/lib/inventory/analyse";
 import { formatDay } from "@/lib/inventory/model";
 import { rupee } from "@/lib/inventory/serials";
 import { cn } from "@/lib/cn";
@@ -308,21 +308,21 @@ export function BookView({
                             "grid size-10 place-items-center rounded-full",
                             isReturn ? "bg-pine/10 text-pine" : entry.movement === "purchase" ? "bg-brand-soft text-brand" : "bg-gold-soft text-gold",
                           )}
-                          aria-label={WORD[entry.movement] ?? movementLabel(entry.movement)}
+                          aria-label={isRefill(entry) ? "Refill" : (WORD[entry.movement] ?? movementLabel(entry.movement))}
                         >
                           <Glyph className="size-[1.1rem]" strokeWidth={2.4} aria-hidden />
                         </span>
                         <span className="min-w-0">
                           <span className="block truncate text-[0.95rem] font-semibold">{entry.companyName}</span>
                           <span className="block truncate text-xs text-muted lg:hidden">
-                            {WORD[entry.movement] ?? movementLabel(entry.movement)} {entry.quantity}
+                            {isRefill(entry) ? "Refill" : (WORD[entry.movement] ?? movementLabel(entry.movement))} {entry.quantity}
                             {entry.cylinderType ? ` × ${entry.cylinderType}` : ""}
                             {serials.length ? <span className="code"> · {serials.slice(0, 2).join(", ")}{serials.length > 2 ? ` +${serials.length - 2}` : ""}</span> : null}
                           </span>
                         </span>
                         <span className="hidden min-w-0 text-sm lg:block">
                           <span className="block truncate">
-                            {WORD[entry.movement] ?? movementLabel(entry.movement)} {entry.quantity}
+                            {isRefill(entry) ? "Refill" : (WORD[entry.movement] ?? movementLabel(entry.movement))} {entry.quantity}
                             {entry.cylinderType ? ` × ${entry.cylinderType}` : ""}
                           </span>
                           {serials.length ? <span className="code block truncate text-xs text-muted">{serials.slice(0, 4).join(", ")}{serials.length > 4 ? ` +${serials.length - 4}` : ""}</span> : null}

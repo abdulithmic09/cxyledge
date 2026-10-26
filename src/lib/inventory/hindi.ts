@@ -371,6 +371,7 @@ export const HINDI: Record<string, string> = {
   "Active now": "अभी ऑनलाइन",
   "All activity": "सारा काम",
   "Changes logged": "दर्ज बदलाव",
+  Changes: "बदलाव",
   "Delete forever": "हमेशा के लिए मिटाएँ",
   "Nothing deleted in the last 30 days.": "पिछले 30 दिनों में कुछ नहीं मिटाया।",
   "Download full backup": "पूरा बैकअप डाउनलोड करें",

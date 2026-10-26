@@ -7,6 +7,7 @@ import { getTracking } from "@/lib/inventory/tracking";
 import { addDays, todayISO } from "@/lib/inventory/model";
 import { rupee } from "@/lib/inventory/serials";
 import { whatsappLink } from "@/lib/inventory/whatsapp";
+import { printHtml } from "@/lib/inventory/files";
 import { cn } from "@/lib/cn";
 import { PageHead, Panel, Tally } from "@/components/yard/ui";
 
@@ -163,26 +164,7 @@ footer{margin-top:18px;padding-top:8px;border-top:1px solid #e4dccd;font-size:8.
 <section><h2>Whole book now</h2><div class="book"><div>To collect<br><b class="due">${esc(money(s.toCollect))}</b></div><div>Cylinders with customers<br><b>${s.cylindersOut}</b></div></div></section>
 <footer><span>Printed ${esc(printed)}</span><span>Cxyledge</span></footer>
 </body></html>`;
-    const frame = document.createElement("iframe");
-    frame.setAttribute("aria-hidden", "true");
-    frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";
-    document.body.appendChild(frame);
-    const doc = frame.contentDocument;
-    if (!doc || !frame.contentWindow) {
-      frame.remove();
-      return;
-    }
-    doc.open();
-    doc.write(html);
-    doc.close();
-    const go = () => {
-      frame.contentWindow?.focus();
-      frame.contentWindow?.print();
-      window.setTimeout(() => frame.remove(), 60_000);
-    };
-    const img = doc.querySelector("img");
-    if (img && !img.complete) img.addEventListener("load", go, { once: true });
-    else window.setTimeout(go, 150);
+    printHtml(html);
   };
 
   const [copied, setCopied] = useState(false);
