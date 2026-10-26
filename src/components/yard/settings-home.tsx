@@ -6,6 +6,7 @@ import { BackupPanel, backupDue, entriesCsvText, paymentsCsvText } from "@/compo
 import { BinPanel } from "@/components/yard/bin-panel";
 import { InstallPanel } from "@/components/yard/install-panel";
 import { TypesPanel } from "@/components/yard/types-panel";
+import { readLang, setLang, type Lang } from "@/lib/inventory/lang";
 import { applyLook, DEFAULT_LOOK, NO_COLORS, readLook, writeLook, type Look, type LookAccent, type LookColors, type LookMode, type LookSize } from "@/lib/inventory/look";
 import { cn } from "@/lib/cn";
 import { YardPanel } from "@/components/yard/yard-panel";
@@ -24,7 +25,7 @@ const SECTIONS: Array<{ id: Section; title: string; hint: string; icon: typeof U
   { id: "team", title: "Team & accounts", hint: "Invite people, join a book, rename or switch books", icon: Users },
   { id: "gases", title: "Gas types & prices", hint: "The gases and cylinder sizes you deal in", icon: Flame },
   { id: "backup", title: "Backup & deleted items", hint: "Download a copy, restore, and Recently deleted", icon: Archive },
-  { id: "app", title: "App & appearance", hint: "Phone app, light or dark, colours and text size", icon: Smartphone },
+  { id: "app", title: "App & appearance", hint: "Language, phone app, light or dark, colours and text size", icon: Smartphone },
 ];
 
 const SIZES: Array<{ id: LookSize; label: string }> = [
@@ -152,6 +153,7 @@ export function SettingsHome({ yard, entries, payments, onChanged }: { yard: Yar
         ) : null}
         {section === "app" ? (
           <>
+            <LanguagePanel />
             <InstallPanel />
             <Panel title="Appearance">
               <p className="mb-3 text-sm text-muted">Theme, colours, and type size stay on this device.</p>
@@ -250,5 +252,32 @@ export function SettingsHome({ yard, entries, payments, onChanged }: { yard: Yar
         })}
       </ul>
     </div>
+  );
+}
+
+/** English or Hindi on this device. */
+function LanguagePanel() {
+  const [lang, setLangState] = useState<Lang>("en");
+  useEffect(() => setLangState(readLang()), []);
+  const pick = (next: Lang) => {
+    setLang(next);
+    setLangState(next);
+  };
+  return (
+    <Panel title="Language">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-muted" data-no-translate>
+          Screens in English or Hindi. Bills and WhatsApp messages stay in English. / स्क्रीन अंग्रेज़ी या हिन्दी में। बिल और WhatsApp संदेश अंग्रेज़ी में रहेंगे।
+        </p>
+        <div className="seg" role="group" aria-label="Language" data-no-translate>
+          <button type="button" aria-pressed={lang === "en"} onClick={() => pick("en")}>
+            English
+          </button>
+          <button type="button" aria-pressed={lang === "hi"} onClick={() => pick("hi")}>
+            हिन्दी
+          </button>
+        </div>
+      </div>
+    </Panel>
   );
 }

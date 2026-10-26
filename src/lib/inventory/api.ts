@@ -1228,7 +1228,7 @@ export const removeMember = createServerFn({ method: "POST" })
 // Payments
 // ---------------------------------------------------------------------------
 
-type PaymentRow = {
+export type PaymentRow = {
   id: string;
   company_name: string;
   direction: string;
@@ -1245,7 +1245,7 @@ type PaymentRow = {
 
 const MODES: PaymentMode[] = ["cash", "upi", "cheque", "bank", "other"];
 
-function mapPayment(row: PaymentRow): Payment {
+export function mapPayment(row: PaymentRow): Payment {
   return {
     id: row.id,
     companyName: row.company_name,

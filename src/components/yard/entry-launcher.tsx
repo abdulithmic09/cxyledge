@@ -23,6 +23,7 @@ import { billPrefix, listCancelledBills, nextNumber } from "@/lib/inventory/bill
 import { addToOutbox, flushOutbox, isOffline, useOutbox } from "@/lib/inventory/outbox";
 import { requestBillEdit } from "@/lib/inventory/nav-requests";
 import { companyBalances, openOrders, type OpenOrder } from "@/lib/inventory/analyse";
+import { dueRows, previewPayment, type DueBill } from "@/lib/inventory/dues";
 import { undoRecent, type UndoTarget } from "@/lib/inventory/entry-actions";
 import { formatDay } from "@/lib/inventory/model";
 import { rupee, splitSerials, subtotal } from "@/lib/inventory/serials";
@@ -39,7 +40,7 @@ const OPEN_EVENT = "cx:entry-sheet";
 const SHOW_EVENT = "cx:show-entry";
 let pendingShow: string | null = null;
 
-export function openEntrySheet(options: { entry?: Entry; mode?: Mode; company?: string } = {}) {
+export function openEntrySheet(options: { entry?: Entry; mode?: Mode; company?: string; payOut?: boolean } = {}) {
   window.dispatchEvent(new CustomEvent(OPEN_EVENT, { detail: options }));
 }
 
@@ -158,7 +159,7 @@ export function EntryLauncher({
   onOpenBills: () => void;
 }) {
   const { canEdit } = useRole();
-  const [sheet, setSheet] = useState<{ key: number; mode: Mode | null; entry: Entry | null; company: string } | null>(null);
+  const [sheet, setSheet] = useState<{ key: number; mode: Mode | null; entry: Entry | null; company: string; payOut?: boolean } | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   const [undoNote, setUndoNote] = useState("");
   const [undoing, setUndoing] = useState(false);
@@ -214,8 +215,8 @@ export function EntryLauncher({
 
   useEffect(() => {
     const listener = (event: Event) => {
-      const detail = (event as CustomEvent<{ entry?: Entry; mode?: Mode; company?: string }>).detail ?? {};
-      setSheet({ key: Date.now(), mode: detail.entry ? null : (detail.mode ?? null), entry: detail.entry ?? null, company: detail.company ?? "" });
+      const detail = (event as CustomEvent<{ entry?: Entry; mode?: Mode; company?: string; payOut?: boolean }>).detail ?? {};
+      setSheet({ key: Date.now(), mode: detail.entry ? null : (detail.mode ?? null), entry: detail.entry ?? null, company: detail.company ?? "", payOut: Boolean(detail.payOut) });
     };
     window.addEventListener(OPEN_EVENT, listener);
     return () => window.removeEventListener(OPEN_EVENT, listener);
@@ -329,6 +330,7 @@ export function EntryLauncher({
           initialMode={sheet.mode}
           editing={sheet.entry}
           initialCompany={sheet.company}
+          payOut={sheet.payOut}
           yardId={yard.id}
           entries={entries}
           payments={payments}
@@ -355,6 +357,7 @@ function EntrySheet({
   initialMode,
   editing,
   initialCompany,
+  payOut,
   yardId,
   entries,
   payments,
@@ -365,6 +368,7 @@ function EntrySheet({
   initialMode: Mode | null;
   editing: Entry | null;
   initialCompany: string;
+  payOut?: boolean;
   yardId: string;
   entries: Entry[];
   payments: Payment[];
@@ -382,7 +386,7 @@ function EntrySheet({
   const [picks, setPicks] = useState<Picks>({});
   const [counts, setCounts] = useState<Counts>({});
   const [backNote, setBackNote] = useState("");
-  const [money, setMoney] = useState<MoneyDraft>(blankMoney);
+  const [money, setMoney] = useState<MoneyDraft>(() => ({ ...blankMoney(), direction: payOut ? "out" : "in" }));
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
@@ -393,6 +397,10 @@ function EntrySheet({
   const allOrders = useMemo(() => openOrders(entries), [entries]);
   const outNames = useMemo(() => [...new Set(allOrders.map((order) => order.entry.companyName))].sort(), [allOrders]);
   const orders = useMemo(() => allOrders.filter((order) => same(order.entry.companyName, draft.companyName)), [allOrders, draft.companyName]);
+  const openBills = useMemo<DueBill[]>(
+    () => (mode === "money" ? (dueRows(entries, payments, () => 0).find((row) => same(row.company, draft.companyName))?.bills ?? []) : []),
+    [entries, payments, draft.companyName, mode],
+  );
   const balance = useMemo(
     () => companyBalances(entries, payments).find((row) => same(row.company, draft.companyName)),
     [entries, payments, draft.companyName],
@@ -619,7 +627,7 @@ function EntrySheet({
     }
   }
 
-  const title = editing ? "Edit entry" : mode ? MODES.find((item) => item.id === mode)!.title : "New entry";
+  const title = editing ? "Edit entry" : mode === "money" && money.direction === "out" ? "Money paid" : mode ? MODES.find((item) => item.id === mode)!.title : "New entry";
   const saveLabel = editing
     ? "Save changes"
     : mode === "take"
@@ -716,7 +724,7 @@ function EntrySheet({
                 </Field>
               </div>
 
-              {balance && draft.companyName.trim() ? (
+              {balance && draft.companyName.trim() && !(mode === "money" && money.direction === "out") ? (
                 <p className="rounded-lg bg-sand px-3 py-2 text-sm">
                   <span className="font-semibold">{balance.company}</span> has {balance.outstandingQty} cylinder{balance.outstandingQty === 1 ? "" : "s"} out
                   {balance.toCollect ? ` · ${rupee(balance.toCollect, 0)} to collect` : ""}.
@@ -729,6 +737,8 @@ function EntrySheet({
                   setMoney={setMoney}
                   due={balance?.toCollect ?? 0}
                   owed={balance?.toPay ?? 0}
+                  advance={money.direction === "in" ? (balance?.advance ?? 0) : (balance?.paidAhead ?? 0)}
+                  openBills={money.direction === "in" ? openBills : []}
                   canPayOut={entries.some((entry) => entry.movement === "purchase" && same(entry.companyName, draft.companyName))}
                   bills={[...new Set(entries.filter((entry) => entry.billNo && same(entry.companyName, draft.companyName)).map((entry) => entry.billNo))].sort().reverse()}
                 />
@@ -1097,6 +1107,8 @@ function MoneyFields({
   setMoney,
   due,
   owed,
+  advance,
+  openBills,
   canPayOut,
   bills,
 }: {
@@ -1104,6 +1116,8 @@ function MoneyFields({
   setMoney: (next: MoneyDraft) => void;
   due: number;
   owed: number;
+  advance: number;
+  openBills: DueBill[];
   canPayOut: boolean;
   bills: string[];
 }) {
@@ -1131,6 +1145,7 @@ function MoneyFields({
       ) : (
         <span className="hidden sm:block" />
       )}
+      <PaymentPreview amount={Number(money.amount) || 0} billNo={money.billNo.trim()} left={left} advance={advance} openBills={openBills} incoming={money.direction === "in"} />
       <fieldset className="sm:col-span-2">
         <legend className="mb-1.5 text-sm font-medium">Paid by</legend>
         <div className="flex flex-wrap gap-2">
@@ -1157,6 +1172,49 @@ function MoneyFields({
           <input className="field" value={money.note} maxLength={300} onChange={(event) => setMoney({ ...money, note: event.target.value })} />
         </Field>
       </div>
+    </div>
+  );
+}
+
+/** Shows what a payment will do: the bills it clears or part-pays, and any advance left over. */
+function PaymentPreview({ amount, billNo, left, advance, openBills, incoming }: { amount: number; billNo: string; left: number; advance: number; openBills: DueBill[]; incoming: boolean }) {
+  if (amount <= 0) {
+    if (advance <= 0) return null;
+    return (
+      <p className="rounded-lg bg-brand-soft px-3 py-2 text-sm sm:col-span-2">
+        {incoming ? "They already have" : "You have already paid"} {rupee(advance, 0)} in advance. {incoming ? "It is used on their next bills automatically." : "It is used on their next bills."}
+      </p>
+    );
+  }
+  const preview = incoming && openBills.length ? previewPayment(openBills, amount, billNo) : { lines: [], advance: Math.max(0, Math.round((amount - left) * 100) / 100) };
+  const shown = preview.lines.slice(0, 6);
+  return (
+    <div className="rounded-lg bg-sand px-3 py-2.5 text-sm sm:col-span-2">
+      {shown.length ? (
+        <>
+          <p className="font-medium">This payment pays</p>
+          <ul className="mt-1 space-y-0.5">
+            {shown.map((line, index) => (
+              <li key={`${line.no}-${index}`} className="flex justify-between gap-3">
+                <span>
+                  <span className="code">{line.no === "Entry" ? "Delivery" : line.no}</span> <span className="text-muted">{formatDay(line.date)}</span>
+                </span>
+                <span className="tabular-nums">
+                  {rupee(line.used, 0)} <span className={line.clears ? "text-pine" : "text-muted"}>{line.clears ? "· paid in full" : "· part paid"}</span>
+                </span>
+              </li>
+            ))}
+            {preview.lines.length > shown.length ? <li className="text-muted">and {preview.lines.length - shown.length} more bills</li> : null}
+          </ul>
+        </>
+      ) : null}
+      {preview.advance > 0 ? (
+        <p className={cn(shown.length && "mt-1.5", "text-pine")}>
+          {rupee(preview.advance, 0)} {left > 0 ? "more than what is due" : ""} will be kept as advance{incoming ? " and used on their next bills automatically" : ""}.
+        </p>
+      ) : !shown.length ? (
+        <p className="text-muted">Recorded against their balance.</p>
+      ) : null}
     </div>
   );
 }

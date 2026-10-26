@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpRight, BellRing, ChevronLeft, ChevronRight, IndianRupee, MessageCircle, Phone, Search, Share2 } from "lucide-react";
+import { ArrowUpRight, BellRing, ChevronLeft, ChevronRight, FileText, IndianRupee, MessageCircle, Phone, Search, Share2 } from "lucide-react";
 import { deleteDocument, listCompanyMeta, restoreDeleted, saveCompanyMeta, saveDocument, type DocRecord, type Entry, type Payment, type YardInfo } from "@/lib/inventory/api";
 import { companyBalances, companyLedger, movementLabel, paymentLabel, type CompanyBalance } from "@/lib/inventory/analyse";
 import { balanceMessage, waNumber, whatsappLink } from "@/lib/inventory/whatsapp";
@@ -19,6 +19,7 @@ import { groupBills } from "@/components/yard/bill-views";
 import { openEntrySheet } from "@/components/yard/entry-launcher";
 import { requestBillEdit } from "@/lib/inventory/nav-requests";
 import { ExportBar } from "@/components/yard/export-bar";
+import { StatementPanel, statementUrl, useStatementLink } from "@/components/yard/statement-panel";
 import { Field, PageHead, Panel, Stat, Tally } from "@/components/yard/ui";
 
 type Filter = "all" | "out" | "due" | "late";
@@ -225,6 +226,7 @@ export function CustomersView({
                       <span className="flex items-center gap-2">
                         <span className="truncate font-semibold">{row.company}</span>
                         {overdue ? <span className="tag tag-due shrink-0">Late</span> : null}
+                        {!row.toCollect && row.advance ? <span className="tag tag-ok shrink-0">Advance {rupee(row.advance, 0)}</span> : null}
                       </span>
                       <span className="block truncate text-xs text-muted">
                         {row.byType.length ? row.byType.map((t) => `${t.out} ${t.type}`).join(" · ") : "No cylinders out"}
@@ -294,6 +296,9 @@ function CompanyPage({
   const meta = metaQuery.data?.find((row) => row.companyName === company);
   const docs = documents.filter((doc) => doc.companyName === company);
   const digits = waNumber(phone);
+  const [showStatement, setShowStatement] = useState(false);
+  const statement = useStatementLink(company);
+  const shareUrl = statement.data ? statementUrl(statement.data.token) : undefined;
 
   return (
     <div className="flex flex-col gap-4">
@@ -307,8 +312,9 @@ function CompanyPage({
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <p className="text-xs text-white/65">To collect</p>
-            <p className="font-display text-[1.85rem] leading-tight tabular-nums">{rupee(balance.toCollect, 0)}</p>
+            <p className="text-xs text-white/65">{!balance.toCollect && balance.advance ? "Advance paid" : "To collect"}</p>
+            <p className="font-display text-[1.85rem] leading-tight tabular-nums">{rupee(!balance.toCollect && balance.advance ? balance.advance : balance.toCollect, 0)}</p>
+            {!balance.toCollect && balance.advance ? <p className="text-xs text-white/65">Used on their next bills</p> : null}
           </div>
           <div>
             <p className="text-xs text-white/65">Cylinders out</p>
@@ -337,7 +343,7 @@ function CompanyPage({
               </button>
             </>
           ) : null}
-          <a className="btn gap-1.5 bg-white/12 text-white ring-1 ring-white/15 hover:bg-white/20" href={whatsappLink(phone, balanceMessage({ yardName: yard.name, balance }))} target="_blank" rel="noopener noreferrer">
+          <a className="btn gap-1.5 bg-white/12 text-white ring-1 ring-white/15 hover:bg-white/20" href={whatsappLink(phone, balanceMessage({ yardName: yard.name, balance, statementUrl: shareUrl }))} target="_blank" rel="noopener noreferrer">
             <MessageCircle className="size-4" aria-hidden /> WhatsApp
           </a>
           {digits ? (
@@ -349,8 +355,12 @@ function CompanyPage({
               <Phone className="size-4" aria-hidden /> Add number
             </button>
           )}
+          <button type="button" className="btn gap-1.5 bg-white/12 text-white ring-1 ring-white/15 hover:bg-white/20" aria-expanded={showStatement} onClick={() => setShowStatement((open) => !open)}>
+            <FileText className="size-4" aria-hidden /> Statement link
+          </button>
         </div>
       </section>
+      {showStatement ? <StatementPanel yard={yard} balance={balance} phone={phone} onClose={() => setShowStatement(false)} /> : null}
 
       <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0" role="tablist" aria-label={`${company} sections`}>
         <div className="tabs">

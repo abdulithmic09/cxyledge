@@ -14,7 +14,7 @@ function inr(value: number) {
   return `₹${Math.round(value).toLocaleString("en-IN")}`;
 }
 
-export function balanceMessage(input: { yardName: string; balance: CompanyBalance; today?: Date }): string {
+export function balanceMessage(input: { yardName: string; balance: CompanyBalance; today?: Date; statementUrl?: string }): string {
   const { yardName, balance } = input;
   const day = (input.today ?? new Date()).toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" });
   const lines = [`Namaste ${balance.company},`, "", `Your balance with ${yardName} as of ${day}:`];
@@ -28,7 +28,9 @@ export function balanceMessage(input: { yardName: string; balance: CompanyBalanc
     }
   }
   if (balance.toCollect > 0) lines.push(`• Amount due: ${inr(balance.toCollect)}`);
-  if (balance.outstandingQty <= 0 && balance.toCollect <= 0) lines.push("• Nothing pending. Thank you!");
+  if (balance.toCollect <= 0 && balance.advance > 0) lines.push(`• Advance with us: ${inr(balance.advance)} (used on your next bills)`);
+  if (balance.outstandingQty <= 0 && balance.toCollect <= 0 && balance.advance <= 0) lines.push("• Nothing pending. Thank you!");
+  if (input.statementUrl) lines.push("", `Your full statement: ${input.statementUrl}`);
   lines.push("");
   const asks = [balance.outstandingQty > 0 ? "return the empty cylinders" : "", balance.toCollect > 0 ? "clear the amount due" : ""].filter(Boolean);
   if (asks.length) lines.push(`Kindly ${asks.join(" and ")} at the earliest.`);

@@ -2,18 +2,19 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ClipboardCheck, Search, Trash2 } from "lucide-react";
 import { deletePayment, listCompanyMeta, saveDocument, type Entry, type Payment, type YardInfo } from "@/lib/inventory/api";
-import { companyBalances } from "@/lib/inventory/analyse";
+import { companyBalances, type CompanyBalance } from "@/lib/inventory/analyse";
 import { createHoldingCharge, deleteStockMove, getTracking, saveHoldTerms, saveStockMove, type StockMove, type StockMoveKind } from "@/lib/inventory/tracking";
 import { cylinderIndex, cylinderStatus, holdingRows, WHERE_LABEL, yardStock, type CylinderEvent, type HoldRow } from "@/lib/inventory/stock";
 import { blobToDataUrl, dmy, makeBillPdf, pdfName, type BillLine } from "@/lib/inventory/bill-pdf";
 import { downloadBlob } from "@/lib/inventory/files";
 import { rupee, splitSerials } from "@/lib/inventory/serials";
-import { todayISO } from "@/lib/inventory/model";
+import { formatDay, todayISO } from "@/lib/inventory/model";
 import { useRole } from "@/lib/inventory/role";
 import { cn } from "@/lib/cn";
 import { TypePicker } from "@/components/yard/type-picker";
 import { Field, PageHead, Panel, Tally } from "@/components/yard/ui";
 import { takeCylinderRequest } from "@/lib/inventory/nav-requests";
+import { openEntrySheet } from "@/components/yard/entry-launcher";
 
 type Note = { tone: "ok" | "bad"; text: string } | null;
 
@@ -104,6 +105,7 @@ export function StockView({ yard, entries, payments, onChanged }: { yard: YardIn
       </div>
       {tab === "plant" ? (
         <>
+          <PlantsSummary moves={moves} balances={balances} />
           <PlantPanel yard={yard} moves={moves} onSaved={refresh} />
           <MovesList moves={moves} onChanged={refresh} />
         </>
@@ -188,22 +190,31 @@ function PlantPanel({ yard, moves, onSaved }: { yard: YardInfo; moves: StockMove
   const [challan, setChallan] = useState("");
   const [date, setDate] = useState(todayISO());
   const [note, setNote] = useState("");
+  const [rate, setRate] = useState("");
+  const [paidNow, setPaidNow] = useState("");
+  const [billNo, setBillNo] = useState("");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<Note>(null);
   const plants = useMemo(() => [...new Set(moves.map((move) => move.plant).filter(Boolean))].sort(), [moves]);
   const counted = splitSerials(serials).length;
+  const howMany = counted || Number(qty) || 0;
+  const refillTotal = kind === "from_plant" && Number(rate) > 0 ? Math.round(Number(rate) * howMany * 100) / 100 : 0;
 
   async function save() {
     setBusy(true);
     setStatus(null);
     try {
-      const result = await saveStockMove({ data: { kind, plant, gasType, serialNo: serials, quantity: Number(qty) || 0, fullCount: null, emptyCount: null, challanNo: challan, note, date } });
+      const result = await saveStockMove({
+        data: { kind, plant, gasType, serialNo: serials, quantity: Number(qty) || 0, fullCount: null, emptyCount: null, challanNo: challan, note, date, refillRate: kind === "from_plant" && rate ? Number(rate) : null, paidNow: paidNow ? Number(paidNow) : null, billNo },
+      });
       if (!result.ok) {
         setStatus({ tone: "bad", text: result.error });
         return;
       }
-      setStatus({ tone: "ok", text: `${counted || qty} × ${gasType} ${kind === "to_plant" ? "sent to" : "back from"} ${plant}.` });
+      setStatus({ tone: "ok", text: `${counted || qty} × ${gasType} ${kind === "to_plant" ? "sent to" : "back from"} ${plant}.${refillTotal ? ` Refill charges ${rupee(refillTotal, 0)} added to ${plant}'s account.` : ""}` });
       setSerials("");
+      setPaidNow("");
+      setBillNo("");
       setQty("");
       setChallan("");
       setNote("");
@@ -254,6 +265,25 @@ function PlantPanel({ yard, moves, onSaved }: { yard: YardInfo; moves: StockMove
               <input className="field" value={note} maxLength={300} onChange={(event) => setNote(event.target.value)} />
             </Field>
           </div>
+          {kind === "from_plant" ? (
+            <div className="grid gap-3 rounded-lg border border-line bg-sand/40 p-3">
+              <p className="text-sm font-medium">Refill charges (optional)</p>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="₹ per cylinder">
+                  <input className="field tabular-nums" inputMode="decimal" value={rate} onChange={(event) => setRate(event.target.value.replace(/[^\d.]/g, ""))} placeholder="0" />
+                </Field>
+                <Field label="Paid now (₹)">
+                  <input className="field tabular-nums" inputMode="decimal" value={paidNow} onChange={(event) => setPaidNow(event.target.value.replace(/[^\d.]/g, ""))} placeholder="0" />
+                </Field>
+              </div>
+              <Field label="Plant's bill no.">
+                <input className="field" value={billNo} maxLength={40} onChange={(event) => setBillNo(event.target.value)} placeholder="Same as challan if left empty" />
+              </Field>
+              <p className="text-xs text-muted">
+                {refillTotal ? `${howMany} × ${rupee(Number(rate), 0)} = ${rupee(refillTotal, 0)} goes on ${plant || "the plant"}'s account, so you can see what you owe and pay it.` : "Add the plant's refill rate to keep track of what you owe them."}
+              </p>
+            </div>
+          ) : null}
           <StatusNote note={status} />
           <button type="button" className="btn btn-rust" disabled={busy} onClick={() => void save()}>
             {busy ? "Saving…" : kind === "to_plant" ? "Record empties sent" : "Record fulls received"}
@@ -746,6 +776,64 @@ function CountWizard({ rows, types, onClose, onSaved }: { rows: ReturnType<typeo
           </div>
         </div>
       )}
+    </Panel>
+  );
+}
+
+/** Each plant: empties still there, last trip, and what you owe them for refills. */
+function PlantsSummary({ moves, balances }: { moves: StockMove[]; balances: CompanyBalance[] }) {
+  const { canEdit } = useRole();
+  const rows = useMemo(() => {
+    const map = new Map<string, { name: string; at: Map<string, number>; last: string }>();
+    for (const move of moves) {
+      if (move.kind === "count" || !move.plant) continue;
+      const key = move.plant.toLowerCase();
+      const row = map.get(key) ?? { name: move.plant, at: new Map<string, number>(), last: "" };
+      const sign = move.kind === "to_plant" ? 1 : -1;
+      row.at.set(move.gasType, (row.at.get(move.gasType) ?? 0) + sign * move.quantity);
+      if (move.date > row.last) row.last = move.date;
+      map.set(key, row);
+    }
+    return [...map.values()]
+      .map((row) => {
+        const balance = balances.find((item) => item.company.toLowerCase() === row.name.toLowerCase());
+        const at = [...row.at.entries()].filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]);
+        return { ...row, balance, atList: at, atTotal: at.reduce((sum, [, n]) => sum + n, 0) };
+      })
+      .sort((a, b) => b.atTotal - a.atTotal || (b.balance?.toPay ?? 0) - (a.balance?.toPay ?? 0) || a.name.localeCompare(b.name));
+  }, [moves, balances]);
+  if (!rows.length) return null;
+  return (
+    <Panel title="Plants">
+      <ul className="divide-y divide-line">
+        {rows.map((row) => (
+          <li key={row.name} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-2.5">
+            <div className="min-w-0">
+              <p className="font-semibold">{row.name}</p>
+              <p className="text-xs text-muted">
+                {row.atTotal ? `${row.atTotal} ${row.atTotal === 1 ? "empty" : "empties"} there: ${row.atList.map(([type, n]) => `${n} ${type}`).join(" · ")}` : "No empties there"} · last trip {formatDay(row.last)}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {row.balance?.toPay ? (
+                <span className="text-right">
+                  <span className="block text-xs text-muted">You owe</span>
+                  <span className="font-bold tabular-nums text-rust">{rupee(row.balance.toPay, 0)}</span>
+                </span>
+              ) : row.balance?.paidAhead ? (
+                <span className="tag tag-ok">Paid ahead {rupee(row.balance.paidAhead, 0)}</span>
+              ) : row.balance ? (
+                <span className="tag tag-ok">Nothing owed</span>
+              ) : null}
+              {canEdit && row.balance?.toPay ? (
+                <button type="button" className="btn btn-ghost h-9 min-h-0 px-3 text-sm" onClick={() => openEntrySheet({ mode: "money", company: row.balance!.company, payOut: true })}>
+                  Pay
+                </button>
+              ) : null}
+            </div>
+          </li>
+        ))}
+      </ul>
     </Panel>
   );
 }

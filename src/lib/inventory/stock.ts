@@ -123,6 +123,8 @@ export function yardStock(entries: Entry[], moves: StockMove[], balances: Compan
     for (const entry of entries) {
       if (typeOf(entry).toLowerCase() !== lower) continue;
       if (!after(entry.entryDate, entry.updatedAt)) continue;
+      // Refill charges from the plant: the stock already came in with the plant trip.
+      if (entry.movement === "purchase" && entry.parentId?.startsWith("plant:")) continue;
       if (entry.movement === "purchase") full += entry.quantity;
       else if (entry.movement === "delivery") full -= entry.quantity;
       else if (entry.movement === "return") empty += entry.quantity;

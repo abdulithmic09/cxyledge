@@ -14,8 +14,8 @@ export type DueRow = {
 };
 
 /**
- * What each customer still owes, bill by bill. Money received with a bill pays that bill;
- * separate payments pay the oldest bills first. A bill is late once its credit days have passed.
+ * What each customer still owes, bill by bill. Money received with a bill, or against a bill number,
+ * pays that bill; other payments pay the oldest bills first. A bill is late once its credit days have passed.
  */
 export function dueRows(entries: Entry[], payments: Payment[], creditFor: (company: string) => number, today = todayISO()): DueRow[] {
   const companies = new Map<string, { bills: DueBill[]; received: number }>();
@@ -38,12 +38,21 @@ export function dueRows(entries: Entry[], payments: Payment[], creditFor: (compa
     if (entry.entryDate < bill.date) bill.date = entry.entryDate;
     byBill.set(key, bill);
   }
+  const againstBill: Payment[] = [];
   for (const payment of payments) {
     if (payment.direction === "charge") {
       byBill.set(`${payment.companyName}|${payment.id}`, { company: payment.companyName, no: payment.receiptNo, date: payment.paidOn, due: "", amount: payment.amount, left: payment.amount, lateDays: 0 });
     } else if (payment.direction === "in") {
-      slot(payment.companyName).received += payment.amount;
+      if (payment.billNo) againstBill.push(payment);
+      else slot(payment.companyName).received += payment.amount;
     }
+  }
+  // Money paid against a named bill pays that bill first; anything over goes to the oldest bills.
+  for (const payment of againstBill) {
+    const bill = byBill.get(`${payment.companyName}|${payment.billNo}`);
+    const used = bill ? Math.min(bill.left, payment.amount) : 0;
+    if (bill) bill.left = Math.round((bill.left - used) * 100) / 100;
+    slot(payment.companyName).received += payment.amount - used;
   }
   for (const bill of byBill.values()) slot(bill.company).bills.push(bill);
 
@@ -92,4 +101,21 @@ export function reminderMessage(input: { yardName: string; row: DueRow; dmy: (is
   ]
     .filter((line, index, all) => line !== "" || all[index - 1] !== "")
     .join("\n");
+}
+
+/**
+ * How a new payment would be used: which open bills it clears or part-pays (the named bill first,
+ * then oldest first), and how much is left over as advance.
+ */
+export function previewPayment(bills: DueBill[], amount: number, billNo = ""): { lines: Array<{ no: string; date: string; used: number; clears: boolean }>; advance: number } {
+  let left = Math.max(0, amount);
+  const order = [...bills].sort((a, b) => Number(b.no === billNo) - Number(a.no === billNo) || a.date.localeCompare(b.date));
+  const lines: Array<{ no: string; date: string; used: number; clears: boolean }> = [];
+  for (const bill of order) {
+    if (left <= 0.004) break;
+    const used = Math.min(left, bill.left);
+    left = Math.round((left - used) * 100) / 100;
+    lines.push({ no: bill.no, date: bill.date, used, clears: used >= bill.left - 0.004 });
+  }
+  return { lines, advance: Math.max(0, left) };
 }

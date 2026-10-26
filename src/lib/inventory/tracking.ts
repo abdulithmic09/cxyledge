@@ -162,7 +162,7 @@ export const getTracking = createServerFn({ method: "GET" })
   });
 
 export const saveStockMove = createServerFn({ method: "POST" })
-  .validator((input: { kind: StockMoveKind; plant: string; gasType: string; serialNo: string; quantity: number; fullCount: number | null; emptyCount: number | null; challanNo: string; note: string; date: string }) => input)
+  .validator((input: { kind: StockMoveKind; plant: string; gasType: string; serialNo: string; quantity: number; fullCount: number | null; emptyCount: number | null; challanNo: string; note: string; date: string; refillRate?: number | null; paidNow?: number | null; billNo?: string }) => input)
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
     const yard = await ensureYard(context.userId);
@@ -193,6 +193,19 @@ export const saveStockMove = createServerFn({ method: "POST" })
       values (${id}, ${yard.id}, ${data.kind}, ${plant}, ${gasType}, ${quantity}, ${serials.join("\n")}, ${fullCount}, ${emptyCount},
               ${String(data.challanNo ?? "").trim().slice(0, 40)}, ${String(data.note ?? "").trim().slice(0, 300)}, ${data.date}, ${context.userId})
     `;
+    // Refill charges for fulls back from the plant: a purchase line on the plant's account, so you can
+    // see and pay what you owe. Linked to this trip (parent "plant:<id>"), so it doesn't add stock twice.
+    const rate = data.kind === "from_plant" ? cleanMoneyValue(data.refillRate ?? null) : null;
+    if (rate && rate > 0) {
+      const due = Math.round(rate * quantity * 100) / 100;
+      const paid = Math.min(due, Math.max(0, cleanMoneyValue(data.paidNow ?? null) ?? 0));
+      const status = paid >= due ? "received" : paid > 0 ? "partial" : "unpaid";
+      const billNo = String(data.billNo ?? "").trim().slice(0, 40) || String(data.challanNo ?? "").trim().slice(0, 40);
+      await sql`
+        insert into entries (id, yard_id, created_by, company_name, entry_date, serial_no, quantity, payment_status, amount_due, amount_paid, note, movement, unit_price, bill_no, parent_id, cylinder_type)
+        values (${crypto.randomUUID()}, ${yard.id}, ${context.userId}, ${plant}, ${data.date}, '', ${quantity}, ${status}, ${due}, ${paid || null}, 'Refill charges', 'purchase', ${rate}, ${billNo}, ${`plant:${id}`}, ${gasType})
+      `;
+    }
     const what =
       data.kind === "count"
         ? `Stock count ${gasType}: ${fullCount ?? "-"} full, ${emptyCount ?? "-"} empty`
@@ -213,6 +226,7 @@ export const deleteStockMove = createServerFn({ method: "POST" })
       where id = ${id} and yard_id = ${yard.id} and deleted_at is null returning kind, gas_type, quantity
     `;
     if (!rows.length) return { ok: false as const, error: "Already removed." };
+    await sql`update entries set deleted_at = now(), deleted_by = ${context.userId}, updated_at = now() where yard_id = ${yard.id} and parent_id = ${`plant:${id}`} and deleted_at is null`;
     await logActivity(yard.id, context.userId, "Removed stock record", `${rows[0]!.kind} · ${rows[0]!.quantity} × ${rows[0]!.gas_type}`);
     return { ok: true as const };
   });

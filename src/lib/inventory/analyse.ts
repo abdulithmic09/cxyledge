@@ -19,6 +19,10 @@ export type CompanyBalance = {
   /** Payments recorded separately (after the bill). */
   received: number;
   paidOut: number;
+  /** Money the customer paid ahead of their bills; it pays their next bills. */
+  advance: number;
+  /** Money you paid a supplier ahead of their bills. */
+  paidAhead: number;
   lastUpdated: string;
 };
 
@@ -62,8 +66,12 @@ export function companyBalances(entries: Entry[], payments: Payment[] = []): Com
     const paidOut = minePaid.filter((payment) => payment.direction === "out").reduce((total, payment) => total + payment.amount, 0);
     const charged = minePaid.filter((payment) => payment.direction === "charge").reduce((total, payment) => total + payment.amount, 0);
     billed += charged;
-    toCollect = Math.max(0, roundMoney(toCollect + charged - received));
-    toPay = Math.max(0, roundMoney(toPay - paidOut));
+    const collectNet = roundMoney(toCollect + charged - received);
+    const payNet = roundMoney(toPay - paidOut);
+    toCollect = Math.max(0, collectNet);
+    toPay = Math.max(0, payNet);
+    const advance = Math.max(0, -collectNet);
+    const paidAhead = Math.max(0, -payNet);
     paid += received + paidOut;
     const typeOf = (entry: Entry) => {
       const own = entry.cylinderType?.trim();
@@ -96,6 +104,8 @@ export function companyBalances(entries: Entry[], payments: Payment[] = []): Com
       toPay,
       received,
       paidOut,
+      advance,
+      paidAhead,
       lastUpdated,
     });
   }

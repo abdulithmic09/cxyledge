@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Boxes, Building2, ChevronRight, Cylinder, LayoutList, MoreHorizontal, PieChart, Receipt, Settings, Users } from "lucide-react";
+import { Boxes, Building2, CalendarCheck, ChevronRight, Cylinder, LayoutList, MoreHorizontal, PieChart, Receipt, Settings, Users } from "lucide-react";
 import { SignInPanel } from "@/components/yard/sign-in-panel";
 import { UserButton } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -10,11 +10,13 @@ import { BackupReminder, backupDue } from "@/components/yard/backup-panel";
 import { registerOffline, useOnline } from "@/lib/inventory/offline";
 import { captureInvite, clearInvite, pendingInvite } from "@/lib/inventory/invite";
 import { applyLook, readLook } from "@/lib/inventory/look";
+import { applyLang, readLang } from "@/lib/inventory/lang";
 import { cn } from "@/lib/cn";
 import { BookView } from "@/components/yard/book";
 import { CustomersView } from "@/components/yard/customers";
 import { BillsView } from "@/components/yard/bills";
 import { StockView } from "@/components/yard/stock-view";
+import { DaySummary } from "@/components/yard/day-summary";
 import { SettingsHome } from "@/components/yard/settings-home";
 import { UsersView } from "@/components/yard/users";
 import { EntryLauncher, showInBook } from "@/components/yard/entry-launcher";
@@ -24,7 +26,7 @@ import { requestBillEdit, requestCylinder } from "@/lib/inventory/nav-requests";
 
 const AnalyticsView = lazy(() => import("@/components/yard/analytics"));
 
-type View = "book" | "customers" | "bills" | "stock" | "more" | "analyse" | "users" | "setup";
+type View = "book" | "customers" | "bills" | "stock" | "more" | "day" | "analyse" | "users" | "setup";
 
 type NavItem = { id: View; label: string; icon: typeof Cylinder; hint?: string };
 
@@ -34,6 +36,7 @@ const NAV: NavItem[] = [
   { id: "customers", label: "Customers", icon: Building2 },
   { id: "bills", label: "Bills", icon: Receipt },
   { id: "stock", label: "Stock", icon: Boxes },
+  { id: "day", label: "Day summary", icon: CalendarCheck },
   { id: "analyse", label: "Analytics", icon: PieChart },
   { id: "users", label: "Users", icon: Users },
   { id: "setup", label: "Settings", icon: Settings },
@@ -49,6 +52,7 @@ const BAR: NavItem[] = [
 ];
 
 const MORE: NavItem[] = [
+  { id: "day", label: "Day summary", icon: CalendarCheck, hint: "Today's cylinders, money collected and new dues" },
   { id: "analyse", label: "Analytics", icon: PieChart, hint: "Sales and payments by day, month or year" },
   { id: "users", label: "Users", icon: Users, hint: "People, roles and activity" },
   { id: "setup", label: "Settings", icon: Settings, hint: "Business, gas types, backup, appearance" },
@@ -169,6 +173,7 @@ function Shell({ userId }: { userId: string }) {
 
   useEffect(() => {
     applyLook(readLook());
+    if (readLang() === "hi") applyLang("hi");
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const onChange = () => applyLook(readLook());
     media.addEventListener("change", onChange);
@@ -357,6 +362,7 @@ function Shell({ userId }: { userId: string }) {
           ) : null}
           {!loading && yard && view === "bills" ? <BillsView key={`bills-${visit}`} yard={yard} entries={entries} onChanged={refresh} /> : null}
           {!loading && yard && view === "stock" ? <StockView key={`stock-${visit}`} yard={yard} entries={entries} payments={payments} onChanged={refresh} /> : null}
+          {!loading && yard && view === "day" ? <DaySummary yard={yard} entries={entries} payments={payments} /> : null}
           {!loading && yard && view === "users" ? <UsersView yardName={yard.name} /> : null}
           {!loading && yard && view === "setup" ? <SettingsHome yard={yard} entries={entries} payments={payments} onChanged={refresh} /> : null}
           {!loading && yard && view === "more" ? (
