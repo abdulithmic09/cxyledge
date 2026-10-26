@@ -125,7 +125,7 @@ export async function shareBlob(filename: string, blob: Blob, title: string): Pr
 
 export function printLines(title: string, lines: string[]) {
   const escape = (value: string) =>
-    value.replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">");
+    value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escape(title)}</title>
     <style>body{font-family:Georgia,serif;color:#1c1915;padding:32px} h1{font-size:22px;margin:0 0 8px} p{color:#5e574e} pre{white-space:pre-wrap;font-family:inherit;font-size:14px}</style>
     </head><body><h1>${escape(title)}</h1><p>Cxyledge</p><pre>${lines.map(escape).join("\n")}</pre></body></html>`;

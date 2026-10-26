@@ -99,6 +99,92 @@ export function DaySummary({ yard, entries, payments }: { yard: YardInfo; entrie
     return out.join("\n");
   }, [s, day, yard.name]);
 
+  /** A clean A4 page of this day, printed from a hidden frame so the app's screen layout isn't used. */
+  const printReport = () => {
+    const esc = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    const now = new Date();
+    const printed = `${now.toLocaleDateString("en-GB", { timeZone: "Asia/Kolkata" })}, ${now.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", minute: "2-digit" })}`;
+    const row = (label: string, value: string, detail = "", tone = "") =>
+      `<tr><td>${esc(label)}${detail ? `<div class="sub">${esc(detail)}</div>` : ""}</td><td class="num ${tone}">${esc(value)}</td></tr>`;
+    const cyl = [
+      row("Given to customers", String(total(s.given)), typeLine(s.given)),
+      row("Taken back", String(total(s.back)), typeLine(s.back), total(s.back) ? "ok" : ""),
+      row("Sent to plant", String(total(s.toPlant)), typeLine(s.toPlant)),
+      row("Back full from plant", String(total(s.fromPlant)), typeLine(s.fromPlant)),
+      total(s.bought) ? row("Bought", String(total(s.bought)), typeLine(s.bought)) : "",
+    ].join("");
+    const cash = [
+      row("Bills made", money(s.billed)),
+      row("Collected", money(s.collected), "", s.collected ? "ok" : ""),
+      ...[...s.modes].map(([mode, amount]) => `<tr class="mode"><td>${esc(MODE_WORD[mode] ?? mode)}</td><td class="num">${esc(money(amount))}</td></tr>`),
+      row("Paid to suppliers", money(s.paidOut)),
+      row("Change in dues", signed(s.duesChange), "", s.duesChange > 0 ? "due" : s.duesChange < 0 ? "ok" : ""),
+    ].join("");
+    const people = s.customers.length
+      ? `<h2>By customer</h2><table class="grid"><thead><tr><th>Company</th><th class="num">Given</th><th class="num">Returned</th><th class="num">Billed</th><th class="num">Paid</th></tr></thead><tbody>${s.customers
+          .map((c) => `<tr><td>${esc(c.name)}</td><td class="num">${c.given || "–"}</td><td class="num">${c.back || "–"}</td><td class="num">${c.billed ? esc(money(c.billed)) : "–"}</td><td class="num ok">${c.paid ? esc(money(c.paid)) : "–"}</td></tr>`)
+          .join("")}</tbody></table>`
+      : `<p class="empty">Nothing recorded on ${esc(dmy(day))}.</p>`;
+    const kpi = (label: string, value: string, tone = "") => `<div class="kpi"><div class="k">${esc(label)}</div><div class="v ${tone}">${esc(value)}</div></div>`;
+    const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(`${yard.name} - Day summary ${dmy(day)}`)}</title>
+<style>
+@page{size:A4;margin:14mm 14mm 16mm}
+*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{margin:0;font-family:"Helvetica Neue",Arial,sans-serif;color:#1c1915;font-size:11pt;line-height:1.35}
+header{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2.5px solid #1e4d3c;padding-bottom:10px;margin-bottom:14px;gap:16px}
+.brand{display:flex;gap:12px;align-items:center}.brand img{height:44px;max-width:110px;object-fit:contain}
+.name{font-family:Georgia,"Times New Roman",serif;font-size:19pt;font-weight:700;color:#1e4d3c}
+.addr{font-size:9pt;color:#6b6257;margin-top:2px}
+.title{text-align:right}.title .t{font-family:Georgia,serif;font-size:15pt;font-weight:700}.title .d{font-size:10pt;color:#6b6257}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
+.kpi{border:1px solid #e4dccd;border-radius:8px;padding:8px 10px;background:#faf7f1}
+.k{font-size:8pt;text-transform:uppercase;letter-spacing:.06em;color:#6b6257;font-weight:600}.v{font-family:Georgia,serif;font-size:16pt;font-weight:700;margin-top:2px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+h2{font-family:Georgia,serif;font-size:12.5pt;margin:0 0 6px;color:#1e4d3c}
+table{width:100%;border-collapse:collapse}
+td,th{padding:6px 4px;border-bottom:1px solid #ece5d8;vertical-align:top;text-align:left}
+th{font-size:8pt;text-transform:uppercase;letter-spacing:.06em;color:#6b6257;border-bottom:1.5px solid #cfc5b3}
+.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:600}
+.sub{font-size:8.5pt;color:#6b6257;margin-top:1px}
+tr.mode td{padding-left:16px;color:#6b6257;font-size:9.5pt}tr.mode .num{font-weight:400}
+.ok{color:#1e4d3c}.due{color:#8f3d16}
+.grid tbody tr:nth-child(even) td{background:#faf7f1}
+section{margin-bottom:16px;break-inside:avoid}
+.book{display:flex;gap:24px;border:1px solid #e4dccd;border-radius:8px;padding:10px 12px;background:#faf7f1}
+.book b{font-family:Georgia,serif;font-size:13pt}
+.empty{color:#6b6257;font-style:italic}
+footer{margin-top:18px;padding-top:8px;border-top:1px solid #e4dccd;font-size:8.5pt;color:#6b6257;display:flex;justify-content:space-between}
+</style></head><body>
+<header><div class="brand">${yard.logo ? `<img src="${esc(yard.logo)}" alt="">` : ""}<div><div class="name">${esc(yard.name)}</div><div class="addr">${esc([yard.address, yard.phone].filter(Boolean).join(" · "))}</div></div></div>
+<div class="title"><div class="t">Day summary</div><div class="d">${esc(dmy(day))}${day === today ? " (so far)" : ""}</div></div></header>
+<div class="kpis">${kpi("Given", String(total(s.given)))}${kpi("Taken back", String(total(s.back)), "ok")}${kpi("Collected", money(s.collected), "ok")}${kpi("Change in dues", signed(s.duesChange), s.duesChange > 0 ? "due" : s.duesChange < 0 ? "ok" : "")}</div>
+<div class="cols"><section><h2>Cylinders</h2><table>${cyl}</table></section><section><h2>Money</h2><table>${cash}</table></section></div>
+<section>${people}</section>
+<section><h2>Whole book now</h2><div class="book"><div>To collect<br><b class="due">${esc(money(s.toCollect))}</b></div><div>Cylinders with customers<br><b>${s.cylindersOut}</b></div></div></section>
+<footer><span>Printed ${esc(printed)}</span><span>Cxyledge</span></footer>
+</body></html>`;
+    const frame = document.createElement("iframe");
+    frame.setAttribute("aria-hidden", "true");
+    frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";
+    document.body.appendChild(frame);
+    const doc = frame.contentDocument;
+    if (!doc || !frame.contentWindow) {
+      frame.remove();
+      return;
+    }
+    doc.open();
+    doc.write(html);
+    doc.close();
+    const go = () => {
+      frame.contentWindow?.focus();
+      frame.contentWindow?.print();
+      window.setTimeout(() => frame.remove(), 60_000);
+    };
+    const img = doc.querySelector("img");
+    if (img && !img.complete) img.addEventListener("load", go, { once: true });
+    else window.setTimeout(go, 150);
+  };
+
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     try {
@@ -207,7 +293,7 @@ export function DaySummary({ yard, entries, payments }: { yard: YardInfo; entrie
         <button type="button" className="btn btn-ghost gap-1.5" onClick={copy}>
           <Copy className="size-4" aria-hidden /> {copied ? "Copied" : "Copy text"}
         </button>
-        <button type="button" className="btn btn-ghost gap-1.5" onClick={() => window.print()}>
+        <button type="button" className="btn btn-ghost gap-1.5" onClick={() => printReport()}>
           <Printer className="size-4" aria-hidden /> Print
         </button>
       </div>
