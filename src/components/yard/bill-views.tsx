@@ -273,124 +273,104 @@ export function BillRegister({
   );
 }
 
-/** On-screen bill that mirrors the PDF layout. */
+/** On-screen bill that mirrors the PDF layout (formal grid). */
 export function BillPreview({ bill }: { bill: BillData }) {
   const { yard } = bill;
   const t = billTotals(bill);
   const sale = bill.kind === "sale";
-  const ids = [yard.phone && `Phone ${yard.phone}`, yard.gst && `GSTIN ${yard.gst}`, yard.pan && `PAN ${yard.pan}`].filter(Boolean) as string[];
-  const label = "text-[10px] font-bold uppercase tracking-[0.14em] text-rust";
-  const grid = "grid grid-cols-[1fr_auto_auto] gap-3 @md:grid-cols-[1fr_3rem_6rem_6.5rem]";
+  const ids = [yard.gst && `GSTIN: ${yard.gst}`, yard.pan && `PAN: ${yard.pan}`].filter(Boolean).join("   ");
+  const lab = "text-[10px] font-bold uppercase tracking-[0.08em] text-[#555]";
+  const cols = "grid grid-cols-[2.2rem_minmax(0,1fr)_2.6rem_5.5rem] @md:grid-cols-[2.6rem_minmax(0,1fr)_3rem_5.5rem_6.5rem]";
+  const unit = `${t.quantity} cylinder${t.quantity === 1 ? "" : "s"}`;
   return (
-    <article className="@container overflow-hidden rounded-xl border border-line bg-white text-[13px] text-[#1c1915] shadow-sm">
-      <header className="flex items-start justify-between gap-3 border-b-4 border-rust bg-[#1c1915] px-4 py-4 text-white @md:px-5">
-        <div className="min-w-0">
-          <p className="font-display text-2xl font-bold tracking-wide @md:text-3xl">{sale ? "BILL" : "PURCHASE BILL"}</p>
-          <p className="truncate text-xs text-white/70">{yard.name}</p>
+    <article className="@container overflow-hidden border-[1.5px] border-[#1c1915] bg-white text-[12.5px] text-[#1c1915] shadow-sm">
+      <p className="bg-[#1c1915] py-1.5 text-center text-[11px] font-bold tracking-[0.3em] text-white">{sale ? "BILL" : "PURCHASE BILL"}</p>
+      <div className="relative border-b border-[#1c1915] px-3 py-3 text-center">
+        {yard.logo ? <img src={yard.logo} alt="" className="absolute left-3 top-3 hidden h-10 w-auto max-w-[110px] object-contain @md:block" /> : null}
+        <p className="text-lg font-bold uppercase tracking-wide @md:text-xl">{yard.name}</p>
+        {yard.address ? <p className="mx-auto max-w-md">{yard.address}</p> : null}
+        {yard.phone ? <p>Phone {yard.phone}</p> : null}
+        {ids ? <p className="font-bold">{ids}</p> : null}
+        {!yard.address && !yard.phone && !ids ? <p className="text-xs text-[#5e574d]">Add your letterhead in Settings.</p> : null}
+      </div>
+      <div className="grid border-b border-[#1c1915] @md:grid-cols-[55%_45%]">
+        <div className="px-3 py-2.5">
+          <p className={lab}>{sale ? "Bill to" : "Supplier"}</p>
+          <p className="mt-1 break-words text-[15px] font-bold">{bill.company || "Company"}</p>
+          {bill.companyPhone ? <p>Phone {bill.companyPhone}</p> : null}
         </div>
-        <dl className="grid shrink-0 grid-cols-[auto_auto] gap-x-3 gap-y-0.5 text-right text-xs">
-          <dt className="text-white/60">Bill no.</dt>
-          <dd className="font-semibold">{bill.billNo || "-"}</dd>
-          <dt className="text-white/60">Date</dt>
-          <dd className="font-semibold tabular-nums">{dmy(bill.date)}</dd>
+        <dl className="grid grid-cols-[5rem_1fr] gap-y-0.5 border-t border-[#1c1915] px-3 py-2.5 @md:border-l @md:border-t-0">
+          <dt className="font-bold">Bill no.</dt>
+          <dd>{bill.billNo || "-"}</dd>
+          <dt className="font-bold">Date</dt>
+          <dd className="tabular-nums">{dmy(bill.date)}</dd>
+          <dt className="font-bold">Payment</dt>
+          <dd>{STATUS_WORD[bill.payment]}</dd>
         </dl>
-      </header>
-
-      <div className="grid gap-4 px-4 py-4 @md:grid-cols-2 @md:px-5">
-        <div className="min-w-0">
-          {yard.logo ? <img src={yard.logo} alt="" className="mb-2 h-10 w-auto max-w-[150px] object-contain" /> : null}
-          <p className={label}>From</p>
-          <p className="mt-1 text-base font-bold">{yard.name}</p>
-          {yard.address ? <p className="whitespace-pre-wrap text-[#5e574d]">{yard.address}</p> : null}
-          {ids.map((line) => (
-            <p key={line} className="text-[#5e574d]">
-              {line}
-            </p>
-          ))}
-          {!yard.address && !ids.length ? <p className="text-xs text-[#5e574d]">Add your letterhead in Settings.</p> : null}
-        </div>
-        <div className="min-w-0 self-start rounded-lg bg-sand p-3">
-          <p className={label}>{sale ? "Bill to" : "Supplier"}</p>
-          <p className="mt-1 break-words text-base font-bold">{bill.company}</p>
-          {bill.companyPhone ? <p className="text-[#5e574d]">Phone {bill.companyPhone}</p> : null}
-          <p className={cn("mt-2 text-xs font-bold", bill.payment === "received" ? "text-pine" : "text-rust")}>Payment: {STATUS_WORD[bill.payment]}</p>
-        </div>
       </div>
-
-      <div className="px-4 @md:px-5">
-        <div className="overflow-hidden rounded-md border border-[#ddd4c7]">
-          <div className={cn(grid, "bg-[#1c1915] px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-white")}>
-            <span>Description</span>
-            <span className="text-right">Qty</span>
-            <span className="hidden text-right @md:block">Rate</span>
-            <span className="text-right">Amount</span>
-          </div>
-          {bill.lines.map((line, index) => (
-            <div key={index} className={cn(grid, "px-3 py-3", index > 0 && "border-t border-[#ece5d8]", index % 2 === 1 && "bg-[#fbf9f5]")}>
-              <div className="min-w-0">
-                <p className="font-bold">{line.cylinderType || "Gas cylinders"}</p>
-                <p className="mt-0.5 break-words text-xs text-[#5e574d]">{line.serials.length ? `Serial nos.: ${line.serials.join(", ")}` : "No serials yet"}</p>
-                <p className="text-xs text-[#5e574d] @md:hidden">{line.price != null ? `@ ${inr(line.price)}` : ""}</p>
-              </div>
-              <span className="text-right tabular-nums">{line.quantity}</span>
-              <span className="hidden text-right tabular-nums @md:block">{line.price != null ? inr(line.price) : "-"}</span>
-              <span className="text-right font-semibold tabular-nums">{line.price != null ? inr(lineAmount(line)) : "-"}</span>
+      <div className={cn(cols, "border-b border-[#1c1915] bg-[#eeeeee] text-[11px] font-bold [&>span]:px-2 [&>span]:py-1.5 [&>span+span]:border-l [&>span+span]:border-[#1c1915]")}>
+        <span>S.No.</span>
+        <span>Description of goods</span>
+        <span className="text-right">Qty</span>
+        <span className="hidden text-right @md:block">Rate (₹)</span>
+        <span className="text-right">Amount (₹)</span>
+      </div>
+      <div className="min-h-32">
+        {bill.lines.map((line, index) => (
+          <div key={index} className={cn(cols, "[&>*]:px-2 [&>*]:py-2 [&>*+*]:border-l [&>*+*]:border-[#1c1915]", index > 0 && "border-t border-[#d0d0d0]")}>
+            <span>{index + 1}</span>
+            <div className="min-w-0">
+              <p className="font-bold">{line.cylinderType || "Gas cylinders"}</p>
+              <p className="mt-0.5 break-words text-[11px] text-[#5e574d]">{line.serials.length ? `Serial nos.: ${line.serials.join(", ")}` : "No serials yet"}</p>
+              <p className="text-[11px] text-[#5e574d] @md:hidden">{line.price != null ? `@ ${inr(line.price)}` : ""}</p>
             </div>
-          ))}
-        </div>
-        <p className="mt-1 px-1 text-[11px] text-[#5e574d]">
-          {t.quantity} cylinder{t.quantity === 1 ? "" : "s"} in all
-        </p>
+            <span className="text-right tabular-nums">{line.quantity}</span>
+            <span className="hidden text-right tabular-nums @md:block">{line.price != null ? inr(line.price) : "-"}</span>
+            <span className="text-right font-bold tabular-nums">{line.price != null ? inr(lineAmount(line)) : "-"}</span>
+          </div>
+        ))}
       </div>
-
-      <div className="grid gap-4 px-4 py-4 @md:grid-cols-[1fr_15rem] @md:px-5">
-        <div className="order-2 min-w-0 @md:order-1">
-          <p className={label}>Amount in words</p>
-          <p className="mt-1 font-semibold">{rupeesInWords(t.total)}</p>
+      <div className="grid border-t border-[#1c1915] @md:grid-cols-[1fr_15rem]">
+        <div className="order-2 px-3 py-2.5 @md:order-1">
+          <p className={lab}>Amount in words</p>
+          <p className="mt-0.5 font-bold">{rupeesInWords(t.total)}</p>
           {bill.note.trim() ? (
             <>
-              <p className={cn(label, "mt-3")}>Notes</p>
-              <p className="mt-1 whitespace-pre-wrap text-[#5e574d]">{bill.note.trim()}</p>
+              <p className={cn(lab, "mt-2.5")}>Notes</p>
+              <p className="mt-0.5 whitespace-pre-wrap">{bill.note.trim()}</p>
             </>
           ) : null}
         </div>
-        <dl className="order-1 grid grid-cols-[1fr_auto] gap-y-1.5 tabular-nums @md:order-2">
-          <dt className="text-[#5e574d]">Subtotal</dt>
+        <dl className="order-1 grid grid-cols-[1fr_auto] border-b border-[#1c1915] tabular-nums @md:order-2 @md:border-b-0 @md:border-l [&>*]:border-b [&>*]:border-[#d0d0d0] [&>*]:px-3 [&>*]:py-1.5">
+          <dt>Total ({unit})</dt>
           <dd className="text-right">{inr(t.subtotal)}</dd>
           {t.adjustment ? (
             <>
-              <dt className="text-[#5e574d]">{t.adjustment < 0 ? "Discount / round-off" : "Adjustment"}</dt>
+              <dt>{t.adjustment < 0 ? "Discount / round-off" : "Adjustment"}</dt>
               <dd className="text-right">
                 {t.adjustment < 0 ? "- " : ""}
                 {inr(Math.abs(t.adjustment))}
               </dd>
+              <dt className="font-bold">Bill total</dt>
+              <dd className="text-right font-bold">{inr(t.total)}</dd>
             </>
           ) : null}
-          <dt className="border-t border-[#ddd4c7] pt-1.5 font-bold">Total</dt>
-          <dd className="border-t border-[#ddd4c7] pt-1.5 text-right font-bold">{inr(t.total)}</dd>
-          <dt className="text-[#5e574d]">{sale ? "Received" : "Paid"}</dt>
+          <dt>{sale ? "Received" : "Paid"}</dt>
           <dd className="text-right">{inr(t.paid)}</dd>
-          <div className="col-span-2 mt-1 flex items-center justify-between gap-3 rounded-md bg-[#1c1915] px-3 py-2.5 text-white">
-            <dt className="text-[11px] font-bold uppercase tracking-wider">Balance due</dt>
-            <dd className="text-base font-bold">{inr(t.due)}</dd>
-          </div>
+          <dt className="!border-0 bg-[#1c1915] font-bold text-white">Balance due</dt>
+          <dd className="!border-0 bg-[#1c1915] text-right text-[14px] font-bold text-white">{inr(t.due)}</dd>
         </dl>
       </div>
-
-      <div className="grid grid-cols-2 gap-6 px-4 pb-4 pt-6 text-xs @md:px-5">
-        <div>
-          <div className="border-t border-[#1c1915] pt-1 text-[#5e574d]">{sale ? "Receiver's signature" : "Supplier's signature"}</div>
-          <p className="truncate font-semibold">{bill.company}</p>
+      <div className="grid h-24 grid-cols-2 border-t border-[#1c1915] text-xs">
+        <div className="flex flex-col justify-between px-3 py-2">
+          <span className="text-[#5e574d]">{sale ? "Receiver's signature" : "Supplier's signature"}</span>
+          <span className="truncate font-bold">{bill.company}</span>
         </div>
-        <div className="text-right">
-          <div className="border-t border-[#1c1915] pt-1 text-[#5e574d]">Authorised signatory</div>
-          <p className="truncate font-semibold">For {yard.name}</p>
+        <div className="flex flex-col justify-between border-l border-[#1c1915] px-3 py-2 text-right">
+          <span className="truncate font-bold">For {yard.name}</span>
+          <span className="text-[#5e574d]">Authorised signatory</span>
         </div>
       </div>
-      <footer className="flex justify-between gap-2 border-t border-[#ddd4c7] px-4 py-2 text-[11px] text-[#5e574d] @md:px-5">
-        <span>Thank you for your business.</span>
-        <span className="truncate">Made with Cxyledge</span>
-      </footer>
     </article>
   );
 }

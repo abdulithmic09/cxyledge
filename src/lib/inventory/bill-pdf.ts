@@ -237,77 +237,113 @@ function assemble(pages: Page[], logo: Logo | null, extra: Logo | null = null): 
   return new Blob(parts as BlobPart[], { type: "application/pdf" });
 }
 
-/** Dark header band with the document title, plus number and date on the right. */
-function header(p: Page, title: string, sub: string, fields: Array<[string, string]>, accent: RGB = RUST) {
-  p.rect(0, 0, W, 78, INK);
-  p.rect(0, 78, W, 4, accent);
-  p.text(title, M, 48, title.length > 10 ? 22 : 26, { bold: true, color: WHITE, spacing: 1.5 });
-  p.text(sub, M, 64, 9.5, { color: [0.8, 0.77, 0.72] });
-  fields.slice(0, 3).forEach(([label, value], index) => {
-    const y = fields.length > 2 ? 28 + index * 18 : 36 + index * 20;
-    p.text(label, R - 160, y, 8, { color: DIM });
-    p.text(value, R, y, 10.5, { bold: true, color: WHITE, align: "right" });
-  });
-}
+// ---------------------------------------------------------------------------
+// "Formal grid" layout: everything inside one ruled frame, like a standard Indian tax invoice.
+// ---------------------------------------------------------------------------
 
-/** Letterhead block on the left; returns the y below it and whether a logo was drawn. */
-function letterhead(p: Page, yard: YardInfo, logo: Logo | null): number {
-  let y = 112;
+const FX = 28; // frame left
+const FR = W - 28; // frame right
+const FT = 26; // frame top
+const FB = H - 30; // frame bottom (footer line sits under it)
+const PAD = 9;
+const GRID: RGB = [0.11, 0.098, 0.082];
+const HAIR: RGB = [0.8, 0.8, 0.8];
+const HEAD_FILL: RGB = [0.93, 0.93, 0.93];
+
+function hline(p: Page, y: number, x1 = FX, x2 = FR, c: RGB = GRID, w = 0.7) {
+  p.line(x1, y, x2, y, c, w);
+}
+function vline(p: Page, x: number, y1: number, y2: number, c: RGB = GRID, w = 0.7) {
+  p.line(x, y1, x, y2, c, w);
+}
+function frame(p: Page, top = FT, bottom = FB) {
+  hline(p, top, FX, FR, GRID, 1.1);
+  hline(p, bottom, FX, FR, GRID, 1.1);
+  vline(p, FX, top, bottom, GRID, 1.1);
+  vline(p, FR, top, bottom, GRID, 1.1);
+}
+/** Black title bar across the top of the frame. Returns the y below it. */
+function titleBar(p: Page, title: string, top = FT): number {
+  p.rect(FX, top, FR - FX, 20, GRID);
+  p.text(title, W / 2, top + 14, 10.5, { bold: true, color: WHITE, align: "center", spacing: 3 });
+  return top + 20;
+}
+/** Business name, address and tax ids, centred. Returns the y below the ruled line. */
+function firmBlock(p: Page, yard: YardInfo, logo: Logo | null, top: number): number {
+  let y = top + 24;
   if (logo) {
-    const lh = 46;
-    const lw = Math.min(150, (logo.w / logo.h) * lh);
-    p.image(M, y - 10, lw, lh);
-    y += lh + 6;
+    const lh = 40;
+    const lw = Math.min(110, (logo.w / logo.h) * lh);
+    p.image(FX + PAD, top + 10, lw, lh);
   }
-  p.text("FROM", M, y, 7.5, { bold: true, color: RUST, spacing: 1.2 });
-  y += 16;
-  p.text(yard.name, M, y, 13, { bold: true });
+  p.text(yard.name.toUpperCase(), W / 2, y, 16, { bold: true, align: "center", spacing: 0.4 });
   y += 15;
-  for (const line of wrap(yard.address || "", 9.5, 240)) {
-    if (!line) continue;
-    p.text(line, M, y, 9.5, { color: MUTED });
-    y += 12.5;
+  const addrLines = yard.address ? wrap(yard.address.replace(/\s*\n\s*/g, ", "), 9, FR - FX - (logo ? 260 : 60)).filter(Boolean).slice(0, 2) : [];
+  if (yard.phone) addrLines.push(`Phone ${yard.phone}`);
+  for (const line of addrLines) {
+    p.text(line, W / 2, y, 9, { align: "center" });
+    y += 11.5;
   }
-  const ids = [yard.phone && `Phone ${yard.phone}`, yard.gst && `GSTIN ${yard.gst}`, yard.pan && `PAN ${yard.pan}`].filter(Boolean) as string[];
-  for (const line of ids) {
-    p.text(line, M, y, 9.5, { color: MUTED });
-    y += 12.5;
+  const ids = [yard.gst && `GSTIN: ${yard.gst}`, yard.pan && `PAN: ${yard.pan}`].filter(Boolean).join("     ");
+  if (ids) {
+    p.text(ids, W / 2, y, 9, { bold: true, align: "center" });
+    y += 11.5;
   }
+  if (!yard.address && !yard.phone && !ids) {
+    p.text("Add your address, phone and GSTIN in Settings > Business details.", W / 2, y, 8.5, { align: "center", color: MUTED });
+    y += 11.5;
+  }
+  y = Math.max(y + 2, logo ? top + 58 : y + 2);
+  hline(p, y);
   return y;
 }
-
-/** Sand box on the right with the other party. */
-function partyBox(p: Page, top: number, label: string, name: string, extra: Array<{ text: string; bold?: boolean; color?: RGB }>) {
-  const BX = 330;
-  p.rect(BX - 14, top - 22, R - BX + 14, 92, SAND);
-  p.text(label, BX, top - 4, 7.5, { bold: true, color: RUST, spacing: 1.2 });
-  let by = top + 13;
-  for (const line of wrap(name || "Company", 12, R - BX - 10, true).slice(0, 2)) {
-    p.text(line, BX, by, 12, { bold: true });
-    by += 14;
+/** Two cells: the other party on the left, document details on the right. */
+function partyRow(p: Page, top: number, label: string, name: string, extra: string[], fields: Array<[string, string]>): number {
+  const mid = FX + (FR - FX) * 0.55;
+  let ly = top + 14;
+  p.text(label.toUpperCase(), FX + PAD, ly, 7.5, { bold: true, color: MUTED, spacing: 0.8 });
+  ly += 15;
+  for (const line of wrap(name || "Company", 12, mid - FX - PAD * 2, true).slice(0, 2)) {
+    p.text(line, FX + PAD, ly, 12, { bold: true });
+    ly += 14;
   }
-  for (const item of extra) {
-    p.text(item.text, BX, by, 9.5, { color: item.color ?? MUTED, bold: item.bold });
-    by += 13;
+  for (const line of extra) {
+    p.text(line, FX + PAD, ly, 9.5);
+    ly += 12.5;
   }
+  let ry = top + 16;
+  for (const [k, v] of fields) {
+    p.text(k, mid + PAD, ry, 9.5, { bold: true });
+    for (const [index, line] of wrap(v || "-", 9.5, FR - mid - PAD * 2 - 78).slice(0, 2).entries()) p.text(line, mid + PAD + 78, ry + index * 12, 9.5);
+    ry += wrap(v || "-", 9.5, FR - mid - PAD * 2 - 78).slice(0, 2).length * 12 + 3.5;
+  }
+  const bottom = Math.max(ly, ry) + 4;
+  vline(p, mid, top, bottom);
+  hline(p, bottom);
+  return bottom;
 }
-
-function signatures(p: Page, top: number, leftLabel: string, leftName: string, yardName: string) {
-  p.line(M, top, M + 190, top, INK, 0.7);
-  p.text(leftLabel, M, top + 14, 9, { color: MUTED });
-  p.text(leftName, M, top + 27, 9.5, { bold: true });
-  p.line(R - 190, top, R, top, INK, 0.7);
-  p.text("Authorised signatory", R, top + 14, 9, { color: MUTED, align: "right" });
-  p.text(`For ${yardName}`, R, top + 27, 9.5, { bold: true, align: "right" });
+/** Bottom row of two signature cells. */
+function signatureRow(p: Page, top: number, leftLabel: string, leftName: string, yardName: string, sign: Logo | null = null) {
+  const mid = (FX + FR) / 2;
+  hline(p, top);
+  vline(p, mid, top, FB);
+  p.text(leftLabel, FX + PAD, top + 14, 8.5, { color: MUTED });
+  if (sign) {
+    const sh = 40;
+    const sw = Math.min(170, (sign.w / sign.h) * sh);
+    p.image(FX + PAD, top + 20, sw, sh, "Im2");
+  }
+  p.text(wrap(leftName, 10, mid - FX - PAD * 2, true)[0] ?? "", FX + PAD, FB - 12, 10, { bold: true });
+  p.text(`For ${yardName}`, FR - PAD, top + 16, 10, { bold: true, align: "right" });
+  p.text("Authorised signatory", FR - PAD, FB - 12, 8.5, { color: MUTED, align: "right" });
 }
-
-function footer(p: Page, left: string, right: string) {
-  p.line(M, H - 48, R, H - 48, LINE);
-  p.text(left, M, H - 32, 8.5, { color: MUTED });
-  p.text(right, R, H - 32, 8, { color: MUTED, align: "right" });
+function pageFooter(p: Page, left: string, right: string) {
+  p.text(left, FX, H - 16, 8, { color: MUTED });
+  p.text(right, FR, H - 16, 7.5, { color: MUTED, align: "right" });
 }
+const plain = (value: number) => value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-/** A designed A4 bill (or credit note) on the book's letterhead. Long bills continue on more pages. */
+/** A4 bill, credit note, challan or holding-charge bill in the formal grid layout. Long bills continue on more pages. */
 export async function makeBillPdf(bill: BillData): Promise<Blob> {
   const { yard } = bill;
   const t = billTotals(bill);
@@ -321,192 +357,210 @@ export async function makeBillPdf(bill: BillData): Promise<Blob> {
   pages.push(p);
 
   const title = credit ? "CREDIT NOTE" : challan ? "DELIVERY CHALLAN" : (bill.title ?? (sale ? "BILL" : "PURCHASE BILL"));
+  const docNo = credit ? credit.no : bill.billNo;
   const fields: Array<[string, string]> = credit
-    ? [["Credit note", credit.no], ["Date", dmy(credit.date)], ["Against bill", bill.billNo || "-"]]
+    ? [["Credit note", credit.no], ["Date", dmy(credit.date)], ["Against bill", bill.billNo || "-"], ["Bill dated", dmy(bill.date)]]
     : challan
-      ? [["Challan no.", bill.billNo || "-"], ["Date", dmy(bill.date)], ...(challan.vehicle ? ([["Vehicle", challan.vehicle]] as Array<[string, string]>) : [])]
-      : [["Bill no.", bill.billNo || "-"], ["Date", dmy(bill.date)]];
-  header(p, title, yard.name, fields, credit ? PINE : RUST);
+      ? [["Challan no.", bill.billNo || "-"], ["Date", dmy(bill.date)], ["Vehicle", challan.vehicle || "-"], ["Driver", challan.driver || "-"]]
+      : [["Bill no.", bill.billNo || "-"], ["Date", dmy(bill.date)], ["Payment", STATUS_WORD[bill.payment]]];
+  const extra = [bill.companyPhone ? `Phone ${bill.companyPhone}` : "", challan?.billedAs ? `Billed as ${challan.billedAs}` : ""].filter(Boolean);
 
-  const y0 = letterhead(p, yard, logo);
-  const boxTop = logo ? 158 : 112;
-  const extra: Array<{ text: string; bold?: boolean; color?: RGB }> = [];
-  if (bill.companyPhone) extra.push({ text: `Phone ${bill.companyPhone}` });
-  if (credit) extra.push({ text: `Bill dated ${dmy(bill.date)}`, bold: true, color: PINE });
-  else if (challan) extra.push({ text: challan.billedAs ? `Billed as ${challan.billedAs}` : "Goods sent for delivery", bold: true, color: PINE });
-  else extra.push({ text: `Payment: ${STATUS_WORD[bill.payment]}`, bold: true, color: bill.payment === "received" ? PINE : RUST });
-  partyBox(p, boxTop, credit ? "ISSUED TO" : challan ? "DELIVER TO" : sale ? "BILL TO" : "SUPPLIER", bill.company, extra);
+  let y = titleBar(p, title);
+  y = firmBlock(p, yard, logo, y);
+  y = partyRow(p, y, credit ? "Issued to" : challan ? "Deliver to" : sale ? "Bill to" : "Supplier", bill.company, extra, fields);
 
-  // Items table
-  let y = Math.max(y0, boxTop + 70) + 22;
-  const cols = { no: M + 10, desc: M + 34, qty: 360, rate: 455, amt: R - 10 };
-  const tableHead = () => {
-    p.rect(M, y, R - M, 24, INK);
-    const hy = y + 15.5;
-    p.text("#", cols.no, hy, 8.5, { bold: true, color: WHITE });
-    p.text("DESCRIPTION", cols.desc, hy, 8.5, { bold: true, color: WHITE, spacing: 0.6 });
-    if (challan) {
-      p.text("QTY", cols.amt, hy, 8.5, { bold: true, color: WHITE, align: "right", spacing: 0.6 });
+  // Items table with ruled columns. The table stretches down so totals and signatures sit at the bottom.
+  const unitWord = bill.unit ?? "cylinder";
+  const priced = !challan;
+  const cols = challan ? { no: FX, desc: FX + 38, qty: FR - 70, rate: 0, amt: 0, end: FR } : { no: FX, desc: FX + 38, qty: FR - 225, rate: FR - 170, amt: FR - 92, end: FR };
+  const SIG_H = 78;
+  const notes = [credit ? `Reason: ${credit.reason || "Bill cancelled"}` : "", bill.note.trim()].filter(Boolean).join("\n");
+  const noteLines = notes ? wrap(notes, 9, (challan ? FR - FX : FR - FX - 210) - PAD * 2).slice(0, 5) : [];
+  const totalsH = challan ? 34 + noteLines.length * 11.5 + (challan.receiver ? 14 : 0) : Math.max(92 + (t.adjustment ? 18 : 0), 50 + noteLines.length * 11.5 + 18);
+  const lastBottom = FB - SIG_H - totalsH; // where the table must end on the last page
+
+  let tableTop = y;
+  const head = () => {
+    p.rect(FX + 0.5, y, FR - FX - 1, 20, HEAD_FILL);
+    const hy = y + 13.5;
+    p.text("S.No.", cols.no + 7, hy, 8.5, { bold: true });
+    p.text(challan ? "Description of goods" : "Description of goods", cols.desc + 7, hy, 8.5, { bold: true });
+    if (priced) {
+      p.text("Qty", cols.rate - 7, hy, 8.5, { bold: true, align: "right" });
+      p.text("Rate (Rs.)", cols.amt - 7, hy, 8.5, { bold: true, align: "right" });
+      p.text("Amount (Rs.)", cols.end - 7, hy, 8.5, { bold: true, align: "right" });
     } else {
-      p.text("QTY", cols.qty, hy, 8.5, { bold: true, color: WHITE, align: "right", spacing: 0.6 });
-      p.text("RATE", cols.rate, hy, 8.5, { bold: true, color: WHITE, align: "right", spacing: 0.6 });
-      p.text("AMOUNT", cols.amt, hy, 8.5, { bold: true, color: WHITE, align: "right", spacing: 0.6 });
+      p.text("Qty", cols.end - 7, hy, 8.5, { bold: true, align: "right" });
     }
-    y += 24;
+    y += 20;
+    hline(p, y);
+  };
+  const columnRules = (from: number, to: number) => {
+    const xs = priced ? [cols.desc, cols.qty, cols.rate, cols.amt] : [cols.desc, cols.qty];
+    for (const x of xs) vline(p, x, from, to);
   };
   const newPage = () => {
-    footer(p, "Continued on the next page", `${credit ? credit.no : bill.billNo}  ·  page ${pages.length}`);
+    columnRules(tableTop, FB);
+    frame(p);
+    pageFooter(p, "Continued on the next page", `${docNo || ""}  ·  page ${pages.length}`);
     p = new Page();
     pages.push(p);
-    p.rect(0, 0, W, 6, INK);
-    p.text(`${title} ${credit ? credit.no : bill.billNo} (continued)`, M, 34, 10, { bold: true });
-    p.text(bill.company, R, 34, 10, { align: "right", color: MUTED });
-    y = 52;
-    tableHead();
+    y = titleBar(p, `${title} (CONTINUED)`);
+    p.text(`${docNo || ""}  ·  ${bill.company}`, W / 2, y + 14, 9.5, { bold: true, align: "center" });
+    y += 22;
+    hline(p, y);
+    tableTop = y;
+    head();
   };
-  tableHead();
+  head();
 
-  const descWidth = (challan ? cols.amt - 60 : cols.qty - 50) - cols.desc;
+  const descWidth = cols.qty - cols.desc - 14;
   const lines = bill.lines.length ? bill.lines : [{ cylinderType: "", serials: [], quantity: 0, price: null }];
   lines.forEach((line, index) => {
     const serialLines = line.serials.length ? wrap(`Serial nos.: ${line.serials.join(", ")}`, 8.5, descWidth) : [];
     const shown = serialLines.slice(0, 10);
     if (serialLines.length > shown.length) shown[shown.length - 1] += " …";
-    const rowH = 30 + shown.length * 11;
-    if (y + rowH > H - 90) newPage();
-    if (index % 2 === 1) p.rect(M, y, R - M, rowH, [0.985, 0.978, 0.965]);
-    p.text(String(index + 1), cols.no, y + 19, 10);
-    p.text(line.cylinderType || "Gas cylinders", cols.desc, y + 19, 10.5, { bold: true });
-    let sy = y + 32;
-    for (const text of shown) {
-      p.text(text, cols.desc, sy, 8.5, { color: MUTED });
-      sy += 11;
+    const nameLines = wrap(line.cylinderType || "Gas cylinders", 10, descWidth, true).slice(0, 2);
+    const rowH = 12 + nameLines.length * 12.5 + shown.length * 10.5 + 4;
+    const room = index === lines.length - 1 ? lastBottom : FB - 4;
+    if (y + rowH > room && y + rowH > FB - 4) newPage();
+    let ty = y + 15;
+    p.text(String(index + 1), cols.no + 7, ty, 9.5);
+    for (const text of nameLines) {
+      p.text(text, cols.desc + 7, ty, 10, { bold: true });
+      ty += 12.5;
     }
-    if (challan) {
-      p.text(String(line.quantity), cols.amt, y + 19, 11, { bold: true, align: "right" });
+    for (const text of shown) {
+      p.text(text, cols.desc + 7, ty - 1, 8.5, { color: MUTED });
+      ty += 10.5;
+    }
+    if (priced) {
+      p.text(String(line.quantity), cols.rate - 7, y + 15, 9.5, { align: "right" });
+      p.text(line.price != null ? plain(line.price) : "-", cols.amt - 7, y + 15, 9.5, { align: "right" });
+      p.text(line.price != null ? plain(lineAmount(line)) : "-", cols.end - 7, y + 15, 9.5, { bold: true, align: "right" });
     } else {
-      p.text(String(line.quantity), cols.qty, y + 19, 10, { align: "right" });
-      p.text(line.price != null ? rs(line.price) : "-", cols.rate, y + 19, 10, { align: "right" });
-      p.text(line.price != null ? rs(lineAmount(line)) : "-", cols.amt, y + 19, 10, { bold: true, align: "right" });
+      p.text(String(line.quantity), cols.end - 7, y + 15, 10.5, { bold: true, align: "right" });
     }
     y += rowH;
-    p.line(M, y, R, y, LINE, 0.6);
+    if (index < lines.length - 1) hline(p, y, FX, FR, HAIR, 0.5);
   });
-  p.text(`${t.quantity} ${bill.unit ?? "cylinder"}${t.quantity === 1 ? "" : "s"} in all`, cols.desc, y + 14, 8.5, { color: MUTED });
+  // If the totals don't fit under the last row, they go on a fresh page.
+  if (y > lastBottom) newPage();
+  const tableEnd = lastBottom;
+  columnRules(tableTop, tableEnd);
+  hline(p, tableEnd);
 
+  // Totals (right cell) and words / notes (left cell).
+  const blockTop = tableEnd;
   if (challan) {
-    if (y + 230 > H - 60) newPage();
-    let cy = y + 40;
-    const info: Array<[string, string]> = [
-      ["Vehicle no.", challan.vehicle || "-"],
-      ["Driver", challan.driver || "-"],
-      ["Received by", challan.receiver || "-"],
-    ];
-    if (bill.note.trim()) info.push(["Notes", bill.note.trim()]);
-    for (const [label, value] of info) {
-      p.text(label, M, cy, 9.5, { color: MUTED });
-      wrap(value, 10, 260).slice(0, 2).forEach((line, index) => p.text(line, M + 90, cy + index * 13, 10, { bold: label === "Received by" }));
-      cy += label === "Notes" ? 30 : 18;
+    let cy = blockTop + 15;
+    p.text(`Total: ${t.quantity} ${unitWord}${t.quantity === 1 ? "" : "s"}`, FX + PAD, cy, 10, { bold: true });
+    if (challan.receiver) {
+      cy += 14;
+      p.text(`Received by: ${challan.receiver}`, FX + PAD, cy, 9.5);
     }
-    const sigTop = cy + (sign ? 72 : 40);
-    if (sign) {
-      const sh = 54;
-      const sw = Math.min(180, (sign.w / sign.h) * sh);
-      p.image(M, sigTop - sh - 4, sw, sh, "Im2");
+    if (noteLines.length) {
+      cy += 15;
+      p.text("NOTES", FX + PAD, cy, 7.5, { bold: true, color: MUTED, spacing: 0.8 });
+      for (const line of noteLines) {
+        cy += 11.5;
+        p.text(line, FX + PAD, cy, 9);
+      }
     }
-    signatures(p, sigTop, "Receiver's signature", challan.receiver || bill.company, yard.name);
-    p.text("Received the above cylinders in good condition.", M, sigTop + 44, 8.5, { color: MUTED });
-    footer(p, "Delivery challan, not a bill.", `${bill.billNo}  ·  ${dmy(bill.date)}  ·  Made with Cxyledge`);
-    return assemble(pages, logo, sign);
-  }
+  } else {
+    const TL = FR - 210;
+    vline(p, TL, blockTop, blockTop + totalsH);
+    let ty = blockTop;
+    const row = (label: string, value: string, opts: { bold?: boolean; last?: boolean } = {}) => {
+      p.text(label, TL + PAD, ty + 13.5, 9.5, { bold: opts.bold });
+      p.text(value, FR - PAD, ty + 13.5, 9.5, { bold: opts.bold, align: "right" });
+      ty += 19;
+      if (!opts.last) hline(p, ty, TL, FR, HAIR, 0.5);
+    };
+    row(`Total (${t.quantity} ${unitWord}${t.quantity === 1 ? "" : "s"})`, plain(t.subtotal));
+    if (t.adjustment) row(t.adjustment < 0 ? "Discount / round-off" : "Adjustment", `${t.adjustment < 0 ? "- " : ""}${plain(Math.abs(t.adjustment))}`);
+    if (t.adjustment) row("Bill total", plain(t.total), { bold: true });
+    if (!credit) row(sale ? "Received" : "Paid", plain(t.paid));
+    const dueTop = blockTop + totalsH - 26;
+    p.rect(TL + 0.4, dueTop, FR - TL - 0.8, 26 - 0.4, GRID);
+    p.text(credit ? "Amount credited" : "Balance due", TL + PAD, dueTop + 17, 10, { bold: true, color: WHITE });
+    p.text(rs(credit ? t.total : t.due), FR - PAD, dueTop + 17, 11.5, { bold: true, color: WHITE, align: "right" });
 
-  // Totals (right) and words / notes (left) — keep them together on one page.
-  const notes = [credit ? `Reason: ${credit.reason || "Bill cancelled"}` : "", bill.note.trim()].filter(Boolean).join("\n");
-  const noteLines = notes ? wrap(notes, 9.5, 345 - M - 40).slice(0, 6) : [];
-  const blockH = 140 + noteLines.length * 12.5;
-  if (y + 24 + blockH > H - 150) newPage();
-  y += 30;
-  const TL = 345;
-  let ty = y;
-  const row = (label: string, value: string, bold = false) => {
-    p.text(label, TL, ty, 9.5, { color: bold ? INK : MUTED, bold });
-    p.text(value, R - 10, ty, 9.5, { align: "right", bold });
-    ty += 17;
-  };
-  row("Subtotal", rs(t.subtotal));
-  if (t.adjustment) row(t.adjustment < 0 ? "Discount / round-off" : "Adjustment / round-off", `${t.adjustment < 0 ? "- " : ""}${rs(Math.abs(t.adjustment))}`);
-  p.line(TL, ty - 9, R, ty - 9, LINE);
-  ty += 3;
-  row(credit ? "Bill total" : "Total", rs(t.total), true);
-  if (!credit) row(sale ? "Received" : "Paid", rs(t.paid));
-  ty += 2;
-  p.rect(TL - 12, ty - 4, R - TL + 12, 30, credit ? PINE : INK);
-  p.text(credit ? "AMOUNT CREDITED" : "BALANCE DUE", TL, ty + 15, 9, { bold: true, color: WHITE, spacing: 1 });
-  p.text(rs(credit ? t.total : t.due), R - 10, ty + 15.5, 12.5, { bold: true, color: WHITE, align: "right" });
-  ty += 30;
-
-  let ly = y;
-  p.text("AMOUNT IN WORDS", M, ly, 7.5, { bold: true, color: RUST, spacing: 1.2 });
-  ly += 15;
-  for (const line of wrap(rupeesInWords(t.total), 10, TL - M - 40, true)) {
-    p.text(line, M, ly, 10, { bold: true });
+    let ly = blockTop + 15;
+    p.text("AMOUNT IN WORDS", FX + PAD, ly, 7.5, { bold: true, color: MUTED, spacing: 0.8 });
     ly += 13;
-  }
-  if (noteLines.length) {
-    ly += 12;
-    p.text(credit ? "REASON / NOTES" : "NOTES", M, ly, 7.5, { bold: true, color: RUST, spacing: 1.2 });
-    ly += 15;
-    for (const line of noteLines) {
-      p.text(line, M, ly, 9.5, { color: MUTED });
+    for (const line of wrap(rupeesInWords(t.total), 10, TL - FX - PAD * 2, true).slice(0, 3)) {
+      p.text(line, FX + PAD, ly, 10, { bold: true });
       ly += 12.5;
     }
+    if (noteLines.length) {
+      ly += 6;
+      p.text(credit ? "REASON / NOTES" : "NOTES", FX + PAD, ly, 7.5, { bold: true, color: MUTED, spacing: 0.8 });
+      for (const line of noteLines) {
+        ly += 11.5;
+        p.text(line, FX + PAD, ly, 9);
+      }
+    }
   }
 
-  const sigY = Math.max(ty, ly) + 70 > H - 120 ? Math.max(ty, ly) + 50 : H - 150;
-  signatures(p, sigY, credit ? "Received by" : sale ? "Receiver's signature" : "Supplier's signature", bill.company, yard.name);
+  signatureRow(p, FB - SIG_H, credit ? "Received by" : challan ? "Receiver's signature" : sale ? "Receiver's signature" : "Supplier's signature", challan?.receiver || bill.company, yard.name, sign);
+  frame(p);
   const tag = credit ? `${credit.no}  ·  ${dmy(credit.date)}` : `${bill.billNo || ""}  ·  ${dmy(bill.date)}`;
-  footer(p, credit ? "This credit note cancels the bill named above." : "Thank you for your business.", `${tag}  ·  ${pages.length > 1 ? `page ${pages.length}  ·  ` : ""}Made with Cxyledge`);
-
-  return assemble(pages, logo);
+  const thanks = credit ? "This credit note cancels the bill named above." : challan ? "Delivery challan, not a bill. Received the above cylinders in good condition." : "Thank you for your business.";
+  pageFooter(p, thanks, `${tag}  ·  ${pages.length > 1 ? `page ${pages.length}  ·  ` : ""}Made with Cxyledge`);
+  return assemble(pages, logo, sign);
 }
 
-/** Payment receipt (money in) or voucher (money paid out) in the same design. */
+/** Payment receipt (money in) or voucher (money paid out) in the same grid layout. */
 export async function makeReceiptPdf(r: ReceiptData): Promise<Blob> {
   const received = r.direction === "in";
   const logo = await logoJpeg(r.yard.logo);
   const p = new Page();
-  header(p, r.title ?? (received ? "RECEIPT" : "PAYMENT VOUCHER"), r.yard.name, [["Receipt no.", r.receiptNo], ["Date", dmy(r.date)]], received ? PINE : RUST);
-  const y0 = letterhead(p, r.yard, logo);
-  const boxTop = logo ? 158 : 112;
-  partyBox(p, boxTop, received ? "RECEIVED FROM" : "PAID TO", r.company, []);
-
-  let y = Math.max(y0, boxTop + 70) + 30;
-  // Big amount band
-  p.rect(M, y, R - M, 62, SAND);
-  p.rect(M, y, 5, 62, received ? PINE : RUST);
-  p.text(received ? "AMOUNT RECEIVED" : "AMOUNT PAID", M + 20, y + 22, 8, { bold: true, color: RUST, spacing: 1.2 });
-  p.text(rs(r.amount), M + 20, y + 47, 22, { bold: true });
-  const words = wrap(rupeesInWords(r.amount), 10, 250, true);
-  words.slice(0, 3).forEach((line, index) => p.text(line, R - 14, y + 24 + index * 13, 10, { bold: index === 0, align: "right", color: index ? MUTED : INK }));
-  y += 92;
-
-  const rows: Array<[string, string]> = [
+  const title = r.title ?? (received ? "RECEIPT" : "PAYMENT VOUCHER");
+  let y = titleBar(p, title);
+  y = firmBlock(p, r.yard, logo, y);
+  y = partyRow(p, y, received ? "Received from" : "Paid to", r.company, [], [
+    ["Receipt no.", r.receiptNo],
+    ["Date", dmy(r.date)],
     ["Mode", r.mode],
-    ["Reference", r.reference || "-"],
-    ["Against bill", r.billNo || "-"],
-  ];
+    ...(r.reference ? ([["Reference", r.reference]] as Array<[string, string]>) : []),
+    ...(r.billNo ? ([["Against bill", r.billNo]] as Array<[string, string]>) : []),
+  ]);
+
+  // Amount band
+  p.rect(FX + 0.5, y + 0.4, FR - FX - 1, 50, HEAD_FILL);
+  p.text(received ? "AMOUNT RECEIVED" : "AMOUNT PAID", FX + PAD, y + 18, 7.5, { bold: true, color: MUTED, spacing: 0.8 });
+  p.text(rs(r.amount), FX + PAD, y + 40, 20, { bold: true });
+  const words = wrap(rupeesInWords(r.amount), 9.5, 290, true).slice(0, 3);
+  words.forEach((line, index) => p.text(line, FR - PAD, y + 20 + index * 12, 9.5, { bold: true, align: "right" }));
+  y += 50;
+  hline(p, y);
+
+  const rows: Array<[string, string]> = [];
   if (r.note) rows.push(["Note", r.note]);
   if (received && r.balanceAfter != null) rows.push(["Balance still due", rs(r.balanceAfter)]);
   for (const [label, value] of rows) {
-    p.text(label, M, y, 9.5, { color: MUTED });
-    const lines = wrap(value, 10, R - M - 160, label === "Balance still due");
-    lines.slice(0, 3).forEach((line, index) => p.text(line, M + 150, y + index * 13, 10, { bold: label === "Balance still due" }));
-    y += Math.max(1, Math.min(3, lines.length)) * 13 + 11;
-    p.line(M, y - 14, R, y - 14, LINE, 0.5);
+    const lines = wrap(value, 9.5, FR - FX - 150).slice(0, 3);
+    p.text(label, FX + PAD, y + 15, 9.5, { bold: true });
+    lines.forEach((line, index) => p.text(line, FX + 140, y + 15 + index * 12, 9.5, { bold: label === "Balance still due" }));
+    vline(p, FX + 130, y, y + 10 + lines.length * 12);
+    y += 10 + lines.length * 12;
+    hline(p, y, FX, FR, HAIR, 0.5);
   }
 
-  signatures(p, Math.max(y + 70, H - 190), received ? "Paid by" : "Received by", r.company, r.yard.name);
-  footer(p, received ? "Received with thanks." : "Payment made as above.", `${r.receiptNo}  ·  ${dmy(r.date)}  ·  Made with Cxyledge`);
+  // Receipts are short: the frame ends under the signatures.
+  const bottom = Math.max(y + 96, 380);
+  const mid = (FX + FR) / 2;
+  const sigTop = bottom - 78;
+  hline(p, sigTop);
+  vline(p, mid, sigTop, bottom);
+  p.text(received ? "Paid by" : "Received by", FX + PAD, sigTop + 14, 8.5, { color: MUTED });
+  p.text(r.company, FX + PAD, bottom - 12, 10, { bold: true });
+  p.text(`For ${r.yard.name}`, FR - PAD, sigTop + 16, 10, { bold: true, align: "right" });
+  p.text("Authorised signatory", FR - PAD, bottom - 12, 8.5, { color: MUTED, align: "right" });
+  frame(p, FT, bottom);
+  p.text(received ? "Received with thanks." : "Payment made as above.", FX, bottom + 14, 8, { color: MUTED });
+  p.text(`${r.receiptNo}  ·  ${dmy(r.date)}  ·  Made with Cxyledge`, FR, bottom + 14, 7.5, { color: MUTED, align: "right" });
   return assemble([p], logo);
 }
 
