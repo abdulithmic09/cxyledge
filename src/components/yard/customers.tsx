@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpRight, BellRing, ChevronLeft, ChevronRight, FileText, IndianRupee, MessageCircle, Phone, Search, Share2 } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, BellRing, ChevronLeft, ChevronRight, FileText, IndianRupee, MessageCircle, MoreHorizontal, Phone, Receipt, Search, Share2, Tags } from "lucide-react";
 import { deleteDocument, listCompanyMeta, restoreDeleted, saveCompanyMeta, saveDocument, type DocRecord, type Entry, type Payment, type YardInfo } from "@/lib/inventory/api";
-import { companyBalances, companyLedger, movementLabel, paymentLabel, type CompanyBalance } from "@/lib/inventory/analyse";
+import { companyBalances, companyLedger, movementLabel, openOrders, paymentLabel, type CompanyBalance } from "@/lib/inventory/analyse";
+import { daysBetween } from "@/lib/inventory/stock";
+import { todayISO } from "@/lib/inventory/model";
 import { balanceMessage, waNumber, whatsappLink } from "@/lib/inventory/whatsapp";
 import { getTracking } from "@/lib/inventory/tracking";
 import { dueRows } from "@/lib/inventory/dues";
@@ -92,9 +94,10 @@ export function CustomersView({
   }, [balances, filter, late, needle, metaByName, entries, documents]);
 
   const company = selected ? balances.find((row) => row.company === selected) : undefined;
-  if (selected && company) {
-    return (
+  const wide = useWide();
+  const companyPage = company ? (
       <CompanyPage
+        key={company.company}
         yard={yard}
         balance={company}
         lateAmount={late.get(company.company) ?? 0}
@@ -106,8 +109,8 @@ export function CustomersView({
         onBack={() => setSelected(null)}
         onOpenBills={onOpenBills}
       />
-    );
-  }
+  ) : null;
+  if (!wide && selected && companyPage) return companyPage;
 
   const open = balances.filter((row) => row.outstandingQty > 0 || row.toCollect > 0);
   const types = [...new Set(open.flatMap((row) => row.byType.map((t) => t.type)))];
@@ -134,8 +137,8 @@ export function CustomersView({
     late: late.size,
   };
 
-  return (
-    <div className="flex flex-col gap-3">
+  const list = (
+    <div className="flex min-w-0 flex-col gap-3">
       <PageHead
         title="Customers"
         detail={`${balances.length} ${balances.length === 1 ? "company" : "companies"}`}
@@ -180,8 +183,8 @@ export function CustomersView({
       </button>
       {showReminders ? <OverduePanel entries={entries} payments={payments} yardName={yard.name} /> : null}
 
-      <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-        <div className="relative min-w-0 flex-1 lg:max-w-sm">
+      <div className={cn("flex flex-col gap-2", !wide && "lg:flex-row lg:items-center")}>
+        <div className={cn("relative min-w-0 flex-1", !wide && "lg:max-w-sm")}>
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" aria-hidden />
           <input className="field border-transparent pl-9 shadow-card" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name, phone, serial or bill no." aria-label="Search customers" />
         </div>
@@ -210,31 +213,49 @@ export function CustomersView({
         </div>
       ) : (
         <div className="card overflow-hidden">
-          <div className="label grid grid-cols-[minmax(0,1fr)_4rem_6.5rem_1rem] gap-3 border-b border-line bg-sand/50 px-4 py-2.5">
-            <span>Company</span>
+          <div className={cn("label hidden grid-cols-[minmax(0,1fr)_3.5rem_6rem] gap-3 border-b border-line bg-sand/50 px-4 py-2.5", !wide && "sm:grid")}>
+            <span className="pl-12">Company</span>
             <span className="text-right">Out</span>
             <span className="text-right">To collect</span>
-            <span />
           </div>
           <ul>
             {rows.map((row) => {
               const overdue = late.get(row.company) ?? 0;
               return (
                 <li key={row.company} className="border-b border-line last:border-b-0">
-                  <button type="button" className="grid w-full grid-cols-[minmax(0,1fr)_4rem_6.5rem_1rem] items-center gap-3 px-4 py-3 text-left hover:bg-sand/60" onClick={() => setSelected(row.company)}>
-                    <span className="min-w-0">
-                      <span className="flex items-center gap-2">
-                        <span className="truncate font-semibold">{row.company}</span>
-                        {overdue ? <span className="tag tag-due shrink-0">Late</span> : null}
-                        {!row.toCollect && row.advance ? <span className="tag tag-ok shrink-0">Advance {rupee(row.advance, 0)}</span> : null}
+                  <button
+                    type="button"
+                    aria-current={selected === row.company ? "true" : undefined}
+                    className={cn("grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left hover:bg-sand/60", !wide && "sm:grid-cols-[minmax(0,1fr)_3.5rem_6rem]", selected === row.company && wide && "bg-brand-soft/60 hover:bg-brand-soft/60")}
+                    onClick={() => setSelected(row.company)}
+                  >
+                    <span className="flex min-w-0 items-center gap-3">
+                      <span
+                        className={cn(
+                          "grid size-9 shrink-0 place-items-center rounded-full text-xs font-bold",
+                          overdue ? "bg-rust text-white" : row.toCollect ? "bg-gold-soft text-gold" : row.advance ? "bg-brand-soft text-brand" : "bg-sand text-muted",
+                        )}
+                        aria-hidden
+                      >
+                        {initials(row.company)}
                       </span>
-                      <span className="block truncate text-xs text-muted">
-                        {row.byType.length ? row.byType.map((t) => `${t.out} ${t.type}`).join(" · ") : "No cylinders out"}
+                      <span className="min-w-0">
+                        <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                          <span className="break-words font-semibold leading-snug">{row.company}</span>
+                          {overdue ? <span className="tag tag-due shrink-0">{rupee(overdue, 0)} late</span> : null}
+                          {!row.toCollect && row.advance ? <span className="tag tag-ok shrink-0">Advance {rupee(row.advance, 0)}</span> : null}
+                        </span>
+                        <span className="block text-xs text-muted">
+                          {row.byType.length ? row.byType.map((t) => `${t.out} ${t.type}`).join(" · ") : "No cylinders out"}
+                          {row.lastUpdated ? ` · last ${row.lastUpdated.slice(8, 10)}/${row.lastUpdated.slice(5, 7)}` : ""}
+                        </span>
                       </span>
                     </span>
-                    <span className={cn("text-right font-bold tabular-nums", !row.outstandingQty && "font-normal text-muted")}>{row.outstandingQty}</span>
-                    <span className={cn("text-right tabular-nums", row.toCollect ? "font-bold text-rust" : "text-muted")}>{row.toCollect ? rupee(row.toCollect, 0) : "—"}</span>
-                    <ChevronRight className="size-4 text-muted" aria-hidden />
+                    <span className={cn("hidden text-right font-display text-lg tabular-nums", !wide && "sm:block", !row.outstandingQty && "text-muted")}>{row.outstandingQty}</span>
+                    <span className="text-right">
+                      <span className={cn("block font-display text-lg tabular-nums", overdue ? "text-rust" : row.toCollect ? "text-gold" : "text-muted")}>{row.toCollect ? rupee(row.toCollect, 0) : "—"}</span>
+                      <span className={cn("block text-xs text-muted", !wide && "sm:hidden")}>{row.outstandingQty} out</span>
+                    </span>
                   </button>
                 </li>
               );
@@ -244,23 +265,56 @@ export function CustomersView({
       )}
     </div>
   );
+  if (!wide) return list;
+  return (
+    <div className="grid grid-cols-[25rem_minmax(0,1fr)] items-start gap-5">
+      <div className="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto pr-1">{list}</div>
+      <div className="min-w-0">
+        {companyPage ?? (
+          <div className="card px-6 py-16 text-center">
+            <p className="font-display text-xl">Pick a company</p>
+            <p className="mt-1 text-sm text-muted">Their balance, bills and cylinders open here.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
+
+/** True on wide computer screens, where lists and details sit side by side. */
+function useWide() {
+  return useSyncExternalStore(
+    (notify) => {
+      const media = window.matchMedia("(min-width: 1280px)");
+      media.addEventListener("change", notify);
+      return () => media.removeEventListener("change", notify);
+    },
+    () => window.matchMedia("(min-width: 1280px)").matches,
+    () => false,
+  );
+}
+
+const initials = (name: string) =>
+  name
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word[0]!.toUpperCase())
+    .join("") || "?";
 
 /* ---------- one company ---------- */
 
-type Tab = "ledger" | "payments" | "bills" | "deposits" | "rates" | "files" | "details";
+type Tab = "account" | "bills" | "cylinders" | "details";
 
 const TABS: Array<{ id: Tab; label: string }> = [
-  { id: "ledger", label: "Ledger" },
-  { id: "payments", label: "Payments" },
+  { id: "account", label: "Account" },
   { id: "bills", label: "Bills" },
-  { id: "deposits", label: "Deposits" },
-  { id: "rates", label: "Rates" },
-  { id: "files", label: "Files" },
+  { id: "cylinders", label: "Cylinders" },
   { id: "details", label: "Details" },
 ];
 
-let lastTab: Tab = "ledger";
+let lastTab: Tab = "account";
 
 function CompanyPage({
   yard,
@@ -297,6 +351,7 @@ function CompanyPage({
   const docs = documents.filter((doc) => doc.companyName === company);
   const digits = waNumber(phone);
   const [showStatement, setShowStatement] = useState(false);
+  const [showMore, setShowMore] = useState(false);
   const statement = useStatementLink(company);
   const shareUrl = statement.data ? statementUrl(statement.data.token) : undefined;
 
@@ -332,38 +387,68 @@ function CompanyPage({
             ) : null}
           </div>
         ) : null}
-        <div className="flex flex-wrap gap-2 [&>*]:h-10 [&>*]:min-h-0 [&>*]:px-3.5 [&>*]:text-sm">
+        <div className="grid grid-cols-[1fr_1fr_auto] gap-2 [&>*]:h-11 [&>*]:min-h-0 [&>*]:px-3 [&>*]:text-sm">
           {canEdit ? (
             <>
               <button type="button" className="btn btn-gold gap-1.5 !shadow-none" onClick={() => openEntrySheet({ mode: "money", company })}>
-                <IndianRupee className="size-4" aria-hidden /> Money received
+                <IndianRupee className="size-4 shrink-0" aria-hidden /> <span className="truncate">Money received</span>
               </button>
               <button type="button" className="btn gap-1.5 bg-white/12 text-white ring-1 ring-white/15 hover:bg-white/20" onClick={() => openEntrySheet({ mode: "give", company })}>
-                <ArrowUpRight className="size-4" aria-hidden /> Give cylinders
+                <ArrowUpRight className="size-4 shrink-0" aria-hidden /> <span className="truncate">Give cylinders</span>
               </button>
             </>
-          ) : null}
-          <a className="btn gap-1.5 bg-white/12 text-white ring-1 ring-white/15 hover:bg-white/20" href={whatsappLink(phone, balanceMessage({ yardName: yard.name, balance, statementUrl: shareUrl }))} target="_blank" rel="noopener noreferrer">
-            <MessageCircle className="size-4" aria-hidden /> WhatsApp
-          </a>
-          {digits ? (
-            <a className="btn gap-1.5 bg-white/12 text-white ring-1 ring-white/15 hover:bg-white/20" href={`tel:+${digits}`}>
-              <Phone className="size-4" aria-hidden /> Call
-            </a>
           ) : (
-            <button type="button" className="btn gap-1.5 bg-white/12 text-white/80 ring-1 ring-white/15 hover:bg-white/20" onClick={() => setTab("details")}>
-              <Phone className="size-4" aria-hidden /> Add number
-            </button>
+            <a className="btn col-span-2 gap-1.5 bg-white/12 text-white ring-1 ring-white/15 hover:bg-white/20" href={whatsappLink(phone, balanceMessage({ yardName: yard.name, balance, statementUrl: shareUrl }))} target="_blank" rel="noopener noreferrer">
+              <MessageCircle className="size-4" aria-hidden /> WhatsApp
+            </a>
           )}
-          <button type="button" className="btn gap-1.5 bg-white/12 text-white ring-1 ring-white/15 hover:bg-white/20" aria-expanded={showStatement} onClick={() => setShowStatement((open) => !open)}>
-            <FileText className="size-4" aria-hidden /> Statement link
+          <button
+            type="button"
+            className={cn("btn gap-1 ring-1 ring-white/15", showMore ? "bg-white text-ink" : "bg-white/12 text-white hover:bg-white/20")}
+            aria-expanded={showMore}
+            aria-label="More actions"
+            onClick={() => setShowMore((open) => !open)}
+          >
+            <MoreHorizontal className="size-4" aria-hidden /> <span className="hidden sm:inline">More</span>
           </button>
         </div>
+        {showMore ? (
+          <div className="grid grid-cols-3 gap-2 [&>*]:h-auto [&>*]:min-h-0 [&>*]:flex-col [&>*]:gap-1 [&>*]:px-2 [&>*]:py-2.5 [&>*]:text-xs">
+            <a className="btn bg-white/12 text-white ring-1 ring-white/15 hover:bg-white/20" href={whatsappLink(phone, balanceMessage({ yardName: yard.name, balance, statementUrl: shareUrl }))} target="_blank" rel="noopener noreferrer">
+              <MessageCircle className="size-5" aria-hidden /> WhatsApp
+            </a>
+            {digits ? (
+              <a className="btn bg-white/12 text-white ring-1 ring-white/15 hover:bg-white/20" href={`tel:+${digits}`}>
+                <Phone className="size-5" aria-hidden /> Call
+              </a>
+            ) : (
+              <button type="button" className="btn bg-white/12 text-white/85 ring-1 ring-white/15 hover:bg-white/20" onClick={() => setTab("details")}>
+                <Phone className="size-5" aria-hidden /> Add number
+              </button>
+            )}
+            <button type="button" className={cn("btn ring-1 ring-white/15", showStatement ? "bg-white text-ink" : "bg-white/12 text-white hover:bg-white/20")} aria-expanded={showStatement} onClick={() => setShowStatement((open) => !open)}>
+              <FileText className="size-5" aria-hidden /> Statement link
+            </button>
+            {canEdit ? (
+              <>
+                <button type="button" className="btn bg-white/12 text-white ring-1 ring-white/15 hover:bg-white/20" onClick={() => openEntrySheet({ mode: "take", company })}>
+                  <ArrowDownLeft className="size-5" aria-hidden /> Take back
+                </button>
+                <button type="button" className="btn bg-white/12 text-white ring-1 ring-white/15 hover:bg-white/20" onClick={() => onOpenBills()}>
+                  <Receipt className="size-5" aria-hidden /> Make bill
+                </button>
+                <button type="button" className="btn bg-white/12 text-white ring-1 ring-white/15 hover:bg-white/20" onClick={() => setTab("details")}>
+                  <Tags className="size-5" aria-hidden /> Rates
+                </button>
+              </>
+            ) : null}
+          </div>
+        ) : null}
       </section>
       {showStatement ? <StatementPanel yard={yard} balance={balance} phone={phone} onClose={() => setShowStatement(false)} /> : null}
 
-      <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0" role="tablist" aria-label={`${company} sections`}>
-        <div className="tabs">
+      <div role="tablist" aria-label={`${company} sections`}>
+        <div className="tabs grid grid-cols-4 [&>button]:justify-center [&>button]:px-1">
           {TABS.map((item) => (
             <button
               key={item.id}
@@ -373,19 +458,50 @@ function CompanyPage({
               onClick={() => setTab(item.id)}
             >
               {item.label}
-              {item.id === "files" && docs.length ? <span className="ml-1 tabular-nums opacity-70">{docs.length}</span> : null}
+              {item.id === "bills" && docs.length ? <span className="ml-1 tabular-nums opacity-70">{docs.length}</span> : null}
+              {item.id === "cylinders" && balance.outstandingQty ? <span className="ml-1 tabular-nums opacity-70">{balance.outstandingQty}</span> : null}
             </button>
           ))}
         </div>
       </div>
 
-      {tab === "ledger" ? <LedgerTab company={company} entries={entries} payments={payments} balance={balance} /> : null}
-      {tab === "payments" ? <PaymentsPanel yard={yard} company={company} entries={entries} payments={payments} balance={balance} onChanged={onChanged} /> : null}
-      {tab === "bills" ? <BillsTab company={company} entries={entries} documents={docs} onOpenBills={onOpenBills} /> : null}
-      {tab === "deposits" ? <DepositsPanel yard={yard} company={company} /> : null}
-      {tab === "rates" ? <RatesPanel company={company} types={yard.cylinderTypes} prices={meta?.prices ?? {}} /> : null}
-      {tab === "files" ? <FilesTab company={company} documents={docs} onChanged={onChanged} /> : null}
-      {tab === "details" ? <DetailsTab company={company} balance={balance} meta={meta} /> : null}
+      {tab === "account" ? (
+        <>
+          <LedgerTab company={company} entries={entries} payments={payments} balance={balance} />
+          <details className="group card">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 [&::-webkit-details-marker]:hidden">
+              <span>
+                <span className="block font-semibold">Payments and receipts</span>
+                <span className="block text-sm text-muted">
+                  {payments.filter((item) => item.companyName === company && item.direction !== "charge").length || "No"} separate payments · record one or download a receipt
+                </span>
+              </span>
+              <ChevronRight className="size-4 shrink-0 text-muted transition-transform group-open:rotate-90" aria-hidden />
+            </summary>
+            <div className="border-t border-line [&>section]:rounded-none [&>section]:border-0 [&>section]:shadow-none">
+              <PaymentsPanel yard={yard} company={company} entries={entries} payments={payments} balance={balance} onChanged={onChanged} />
+            </div>
+          </details>
+        </>
+      ) : null}
+      {tab === "bills" ? (
+        <>
+          <BillsTab company={company} entries={entries} documents={docs} onOpenBills={onOpenBills} />
+          <FilesTab company={company} documents={docs} onChanged={onChanged} />
+        </>
+      ) : null}
+      {tab === "cylinders" ? (
+        <>
+          <CylindersTab company={company} entries={entries} balance={balance} />
+          <DepositsPanel yard={yard} company={company} />
+        </>
+      ) : null}
+      {tab === "details" ? (
+        <>
+          <DetailsTab company={company} balance={balance} meta={meta} />
+          <RatesPanel company={company} types={yard.cylinderTypes} prices={meta?.prices ?? {}} />
+        </>
+      ) : null}
     </div>
   );
 }
@@ -429,11 +545,27 @@ function LedgerTab({ company, entries, payments, balance }: { company: string; e
   );
   return (
     <Panel title="Ledger">
-      <p className="mb-3 text-xs text-muted">Balance is what {company} owes you. Below zero means you owe them.</p>
+      <p className="mb-3 text-xs text-muted"><span className="sm:hidden">Newest first. </span>Balance is what {company} owes you.</p>
       {ledger.length === 0 ? (
         <p className="text-sm text-muted">No amounts recorded yet.</p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-line">
+        <>
+          <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line sm:hidden">
+            {[...ledger].reverse().map((row) => (
+              <li key={row.key} className="flex items-start justify-between gap-3 px-3 py-2.5 text-sm">
+                <span className="min-w-0">
+                  <span className="block leading-snug">{row.particulars}</span>
+                  <span className="block text-xs tabular-nums text-muted">{formatDay(row.date)}</span>
+                </span>
+                <span className="shrink-0 text-right tabular-nums">
+                  {row.debit ? <span className="block font-semibold">+ {rupee(row.debit, 0)}</span> : null}
+                  {row.credit ? <span className="block font-semibold text-pine">− {rupee(row.credit, 0)}</span> : null}
+                  <span className={cn("block text-xs text-muted", row.balance < 0 && "text-pine")}>Balance {row.balance < 0 ? `${rupee(-row.balance, 0)} adv.` : rupee(row.balance, 0)}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <div className="hidden overflow-x-auto rounded-lg border border-line sm:block">
           <table className="w-full min-w-[34rem] text-sm">
             <thead className="bg-sand text-left text-xs text-muted">
               <tr>
@@ -457,25 +589,85 @@ function LedgerTab({ company, entries, payments, balance }: { company: string; e
             </tbody>
           </table>
         </div>
+        </>
       )}
       <div className="mt-4 flex flex-col gap-3">
         <ExportBar title={`${company} ledger`} filename={`cxyledge-ledger-${slug(company)}`} lines={[company, "", ...ledgerLines]} csv={ledgerCsv} />
         <details className="text-sm">
-          <summary className="cursor-pointer text-muted">Cylinder movements and statement</summary>
-          <ul className="mt-2 flex flex-col gap-1">
-            {companyEntries.slice(0, 40).map((entry) => (
-              <li key={entry.id}>
-                {formatDay(entry.entryDate)} · {movementLabel(entry.movement)} · {entry.quantity}
-                {entry.cylinderType ? ` × ${entry.cylinderType}` : ""} · {paymentLabel(entry.paymentStatus)}
-              </li>
-            ))}
-          </ul>
+          <summary className="cursor-pointer text-muted">Full statement with every cylinder line</summary>
           <div className="mt-3">
             <ExportBar title={`${company} statement`} filename={`cxyledge-${slug(company)}`} lines={lines} csv={csv} />
           </div>
         </details>
       </div>
     </Panel>
+  );
+}
+
+/** What the company holds right now, since when, and every cylinder line. */
+function CylindersTab({ company, entries, balance }: { company: string; entries: Entry[]; balance: CompanyBalance }) {
+  const today = todayISO();
+  const open = useMemo(() => openOrders(entries).filter((order) => order.entry.companyName === company), [entries, company]);
+  const lines = useMemo(() => entries.filter((entry) => entry.companyName === company), [entries, company]);
+  return (
+    <>
+      <Panel title="With them now">
+        {balance.outstandingQty ? (
+          <>
+            <div className="flex flex-wrap gap-2">
+              {balance.byType.map((t) => (
+                <span key={t.type} className="rounded-full bg-sand px-3 py-1 text-sm">
+                  <b className="tabular-nums">{t.out}</b> × {t.type}
+                </span>
+              ))}
+            </div>
+            <ul className="mt-3 divide-y divide-line">
+              {open.map((order) => {
+                const days = daysBetween(order.entry.entryDate, today);
+                return (
+                  <li key={order.entry.id} className="flex items-start justify-between gap-3 py-2.5 text-sm">
+                    <span className="min-w-0">
+                      <span className="block font-medium">
+                        {order.leftQty} × {order.entry.cylinderType || "cylinders"}
+                      </span>
+                      {order.leftSerials.length ? <span className="code block break-words text-xs text-muted">{order.leftSerials.join(", ")}</span> : null}
+                    </span>
+                    <span className="shrink-0 text-right text-xs text-muted">
+                      Given {formatDay(order.entry.entryDate)}
+                      <span className={cn("block font-semibold", days > 30 ? "text-rust" : "text-ink")}>{days} {days === 1 ? "day" : "days"}</span>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        ) : (
+          <p className="text-sm text-muted">No cylinders with {company} right now.</p>
+        )}
+      </Panel>
+      <Panel title="Every cylinder line">
+        {lines.length ? (
+          <ul className="divide-y divide-line text-sm">
+            {lines.slice(0, 60).map((entry) => (
+              <li key={entry.id} className="flex items-center justify-between gap-3 py-2">
+                <span className="min-w-0">
+                  <span className="block">
+                    {movementLabel(entry.movement)} {entry.quantity}
+                    {entry.cylinderType ? ` × ${entry.cylinderType}` : ""}
+                  </span>
+                  <span className="block text-xs text-muted">{formatDay(entry.entryDate)}{entry.billNo ? ` · ${entry.billNo}` : ""}</span>
+                </span>
+                <span className={cn("tag shrink-0", entry.movement === "return" || entry.paymentStatus === "received" ? "tag-ok" : entry.paymentStatus === "partial" ? "tag-part" : "tag-due")}>
+                  {entry.movement === "return" ? "Returned" : paymentLabel(entry.paymentStatus)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-muted">Nothing yet.</p>
+        )}
+      </Panel>
+    </>
   );
 }
 

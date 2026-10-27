@@ -157,6 +157,86 @@ export function BookView({
     return onShowEntry(show);
   }, []);
 
+  const renderDetail = (entry: Entry) => {
+    const isReturn = entry.movement === "return";
+    const parent = isReturn && entry.parentId ? byId.get(entry.parentId) : undefined;
+    const serials = entry.serialNo.split(/[\n,]+/).map((item) => item.trim()).filter(Boolean);
+    return (
+      <>
+                          <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-3 gap-y-1">
+                            {serials.length ? (
+                              <>
+                                <dt className="text-muted">Serials</dt>
+                                <dd className="code break-words">{serials.join(", ")}</dd>
+                              </>
+                            ) : null}
+                            {isReturn ? (
+                              <>
+                                <dt className="text-muted">From</dt>
+                                <dd>{parent ? `Delivery of ${formatDay(parent.entryDate)}${parent.billNo ? ` · ${parent.billNo}` : ""}` : "Taken back"}</dd>
+                              </>
+                            ) : (
+                              <>
+                                {entry.unitPrice != null ? (
+                                  <>
+                                    <dt className="text-muted">Price</dt>
+                                    <dd className="tabular-nums">{rupee(entry.unitPrice)} each</dd>
+                                  </>
+                                ) : null}
+                                <dt className="text-muted">Due / received</dt>
+                                <dd className="tabular-nums">
+                                  {rupee(entry.amountDue)} / {rupee(entry.amountPaid)}
+                                </dd>
+                                {entry.billNo ? (
+                                  <>
+                                    <dt className="text-muted">Bill</dt>
+                                    <dd className="code">{entry.billNo}</dd>
+                                  </>
+                                ) : null}
+                              </>
+                            )}
+                            <dt className="text-muted">Entered by</dt>
+                            <dd>{entry.createdBy === userId ? "You" : (memberName.get(entry.createdBy) ?? "A teammate")}</dd>
+                            {entry.note && entry.note !== "Marked received" ? (
+                              <>
+                                <dt className="text-muted">Note</dt>
+                                <dd>{entry.note}</dd>
+                              </>
+                            ) : null}
+                          </dl>
+                          {canEdit ? (
+                            <div className="flex flex-wrap gap-2 pt-1">
+                              {isReturn ? null : (
+                                <button type="button" className="btn btn-ghost h-9 min-h-0 px-3 text-sm" onClick={() => openEntrySheet({ entry })}>
+                                  Edit
+                                </button>
+                              )}
+                              {!isOwner ? null : pendingDelete === entry.id ? (
+                                <>
+                                  <button type="button" className="btn btn-danger h-9 min-h-0 px-3 text-sm" onClick={() => remove.mutate(entry)} disabled={remove.isPending}>
+                                    {isReturn ? "Undo this return" : "Delete"}
+                                  </button>
+                                  <button type="button" className="btn btn-ghost h-9 min-h-0 px-3 text-sm" onClick={() => setPendingDelete(null)}>
+                                    Keep
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost h-9 min-h-0 gap-1.5 px-3 text-sm text-muted"
+                                  aria-label={isReturn ? `Undo return from ${entry.companyName}` : `Delete ${entry.companyName}`}
+                                  onClick={() => setPendingDelete(entry.id)}
+                                >
+                                  <Trash2 className="size-4" aria-hidden /> {isReturn ? "Undo return" : "Delete"}
+                                </button>
+                              )}
+                            </div>
+                          ) : null}
+      </>
+    );
+  };
+  const detailEntry = expanded ? entries.find((entry) => entry.id === expanded) : undefined;
+
   const visible = shown.slice(0, limit);
   const days: Array<{ day: string; rows: Entry[] }> = [];
   for (const entry of visible) {
@@ -276,7 +356,8 @@ export function BookView({
           ) : null}
         </div>
       ) : (
-        <div className="flex flex-col gap-1">
+        <div className="xl:grid xl:grid-cols-[minmax(0,1fr)_20rem] xl:items-start xl:gap-5">
+        <div className="flex min-w-0 flex-col gap-1">
           <div className="label hidden grid-cols-[2.5rem_minmax(0,1.3fr)_minmax(0,1.6fr)_7.5rem_7rem] gap-3 px-4 pt-1 lg:grid">
             <span />
             <span>Company</span>
@@ -286,7 +367,7 @@ export function BookView({
           </div>
           {days.map((group) => (
             <section key={group.day} aria-label={formatDay(group.day)}>
-              <h3 className="label px-1 pb-1.5 pt-3">{group.day === today ? `Today · ${formatDay(group.day)}` : formatDay(group.day)}</h3>
+              <DayHeading day={group.day} today={today} rows={group.rows} />
               <ul className="flex flex-col gap-2">
                 {group.rows.map((entry) => {
                   const isReturn = entry.movement === "return";
@@ -296,11 +377,18 @@ export function BookView({
                   const Glyph = entry.movement === "return" ? ArrowDownLeft : entry.movement === "purchase" ? PackagePlus : ArrowUpRight;
                   const status = isReturn ? "Returned" : entry.movement === "purchase" ? (entry.paymentStatus === "received" ? "Paid" : entry.paymentStatus === "partial" ? "Part paid" : "Not paid") : paymentLabel(entry.paymentStatus);
                   return (
-                    <li key={entry.id} id={`entry-${entry.id}`} className={cn("card overflow-hidden transition-shadow duration-700", flash === entry.id && "ring-2 ring-gold")}>
+                    <li key={entry.id} id={`entry-${entry.id}`} className={cn("card relative overflow-hidden transition-shadow duration-700", flash === entry.id && "ring-2 ring-gold")}>
+                      <span
+                        aria-hidden
+                        className={cn(
+                          "absolute inset-y-0 left-0 w-1",
+                          isReturn || (entry.movement === "delivery" && entry.paymentStatus === "received") ? "bg-pine" : entry.movement === "purchase" ? "bg-brand/60" : entry.paymentStatus === "partial" ? "bg-[#c98a1c]" : "bg-rust",
+                        )}
+                      />
                       <button
                         type="button"
                         aria-expanded={open}
-                        className="grid w-full grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 px-3.5 py-3 text-left hover:bg-sand/50 lg:grid-cols-[2.5rem_minmax(0,1.3fr)_minmax(0,1.6fr)_7.5rem_7rem] lg:px-4"
+                        className="grid w-full grid-cols-[2.5rem_minmax(0,1fr)_auto] items-start gap-3 px-3.5 py-3 text-left hover:bg-sand/50 lg:grid-cols-[2.5rem_minmax(0,1.3fr)_minmax(0,1.6fr)_7.5rem_7rem] lg:items-center lg:px-4"
                         onClick={() => setExpanded(open ? null : entry.id)}
                       >
                         <span
@@ -313,19 +401,24 @@ export function BookView({
                           <Glyph className="size-[1.1rem]" strokeWidth={2.4} aria-hidden />
                         </span>
                         <span className="min-w-0">
-                          <span className="block truncate text-[0.95rem] font-semibold">{entry.companyName}</span>
-                          <span className="block truncate text-xs text-muted lg:hidden">
+                          <span className="block break-words text-[0.95rem] font-semibold leading-snug">{entry.companyName}</span>
+                          <span className="mt-0.5 block text-[0.8rem] leading-snug lg:hidden">
                             {isRefill(entry) ? "Refill" : (WORD[entry.movement] ?? movementLabel(entry.movement))} {entry.quantity}
                             {entry.cylinderType ? ` × ${entry.cylinderType}` : ""}
-                            {serials.length ? <span className="code"> · {serials.slice(0, 2).join(", ")}{serials.length > 2 ? ` +${serials.length - 2}` : ""}</span> : null}
                           </span>
+                          {serials.length ? (
+                            <span className="code mt-0.5 block break-words text-[0.7rem] text-muted lg:hidden">
+                              {serials.slice(0, 6).join(", ")}
+                              {serials.length > 6 ? ` +${serials.length - 6} more` : ""}
+                            </span>
+                          ) : null}
                         </span>
                         <span className="hidden min-w-0 text-sm lg:block">
-                          <span className="block truncate">
+                          <span className="block">
                             {isRefill(entry) ? "Refill" : (WORD[entry.movement] ?? movementLabel(entry.movement))} {entry.quantity}
                             {entry.cylinderType ? ` × ${entry.cylinderType}` : ""}
                           </span>
-                          {serials.length ? <span className="code block truncate text-xs text-muted">{serials.slice(0, 4).join(", ")}{serials.length > 4 ? ` +${serials.length - 4}` : ""}</span> : null}
+                          {serials.length ? <span className="code block break-words text-xs text-muted">{serials.slice(0, 6).join(", ")}{serials.length > 6 ? ` +${serials.length - 6}` : ""}</span> : null}
                         </span>
                         <span className="text-right lg:contents">
                           <span className="block text-[0.95rem] font-bold tabular-nums lg:text-right">{isReturn ? `+${entry.quantity}` : entry.amountDue != null ? rupee(entry.amountDue, 0) : "—"}</span>
@@ -334,79 +427,7 @@ export function BookView({
                           </span>
                         </span>
                       </button>
-                      {open ? (
-                        <div className="grid gap-2 border-t border-line bg-sand/40 px-4 py-3 text-sm lg:pl-[4.25rem]">
-                          <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-3 gap-y-1">
-                            {serials.length ? (
-                              <>
-                                <dt className="text-muted">Serials</dt>
-                                <dd className="code break-words">{serials.join(", ")}</dd>
-                              </>
-                            ) : null}
-                            {isReturn ? (
-                              <>
-                                <dt className="text-muted">From</dt>
-                                <dd>{parent ? `Delivery of ${formatDay(parent.entryDate)}${parent.billNo ? ` · ${parent.billNo}` : ""}` : "Taken back"}</dd>
-                              </>
-                            ) : (
-                              <>
-                                {entry.unitPrice != null ? (
-                                  <>
-                                    <dt className="text-muted">Price</dt>
-                                    <dd className="tabular-nums">{rupee(entry.unitPrice)} each</dd>
-                                  </>
-                                ) : null}
-                                <dt className="text-muted">Due / received</dt>
-                                <dd className="tabular-nums">
-                                  {rupee(entry.amountDue)} / {rupee(entry.amountPaid)}
-                                </dd>
-                                {entry.billNo ? (
-                                  <>
-                                    <dt className="text-muted">Bill</dt>
-                                    <dd className="code">{entry.billNo}</dd>
-                                  </>
-                                ) : null}
-                              </>
-                            )}
-                            <dt className="text-muted">Entered by</dt>
-                            <dd>{entry.createdBy === userId ? "You" : (memberName.get(entry.createdBy) ?? "A teammate")}</dd>
-                            {entry.note && entry.note !== "Marked received" ? (
-                              <>
-                                <dt className="text-muted">Note</dt>
-                                <dd>{entry.note}</dd>
-                              </>
-                            ) : null}
-                          </dl>
-                          {canEdit ? (
-                            <div className="flex flex-wrap gap-2 pt-1">
-                              {isReturn ? null : (
-                                <button type="button" className="btn btn-ghost h-9 min-h-0 px-3 text-sm" onClick={() => openEntrySheet({ entry })}>
-                                  Edit
-                                </button>
-                              )}
-                              {!isOwner ? null : pendingDelete === entry.id ? (
-                                <>
-                                  <button type="button" className="btn btn-danger h-9 min-h-0 px-3 text-sm" onClick={() => remove.mutate(entry)} disabled={remove.isPending}>
-                                    {isReturn ? "Undo this return" : "Delete"}
-                                  </button>
-                                  <button type="button" className="btn btn-ghost h-9 min-h-0 px-3 text-sm" onClick={() => setPendingDelete(null)}>
-                                    Keep
-                                  </button>
-                                </>
-                              ) : (
-                                <button
-                                  type="button"
-                                  className="btn btn-ghost h-9 min-h-0 gap-1.5 px-3 text-sm text-muted"
-                                  aria-label={isReturn ? `Undo return from ${entry.companyName}` : `Delete ${entry.companyName}`}
-                                  onClick={() => setPendingDelete(entry.id)}
-                                >
-                                  <Trash2 className="size-4" aria-hidden /> {isReturn ? "Undo return" : "Delete"}
-                                </button>
-                              )}
-                            </div>
-                          ) : null}
-                        </div>
-                      ) : null}
+                      {open ? <div className="grid gap-2 border-t border-line bg-sand/40 px-4 py-3 text-sm lg:pl-[4.25rem] xl:hidden">{renderDetail(entry)}</div> : null}
                     </li>
                   );
                 })}
@@ -419,7 +440,50 @@ export function BookView({
             </button>
           ) : null}
         </div>
+        <aside className="sticky top-20 hidden xl:block" aria-label="Selected line">
+          {detailEntry ? (
+            <div className="card overflow-hidden">
+              <div className="border-b border-line px-4 py-3">
+                <p className="label">{isRefill(detailEntry) ? "Refill" : (WORD[detailEntry.movement] ?? movementLabel(detailEntry.movement))} · {formatDay(detailEntry.entryDate)}</p>
+                <p className="mt-0.5 font-display text-xl leading-snug">{detailEntry.companyName}</p>
+                <p className="text-sm">
+                  {detailEntry.quantity}
+                  {detailEntry.cylinderType ? ` × ${detailEntry.cylinderType}` : " cylinders"}
+                  {detailEntry.movement !== "return" && detailEntry.amountDue != null ? ` · ${rupee(detailEntry.amountDue, 0)}` : ""}
+                </p>
+              </div>
+              <div className="grid gap-2 px-4 py-3 text-sm">{renderDetail(detailEntry)}</div>
+            </div>
+          ) : (
+            <div className="card px-4 py-6 text-center text-sm text-muted">Click a line to see its details here: serials, bill, who entered it, and Edit or Delete.</div>
+          )}
+        </aside>
+        </div>
       )}
     </div>
+  );
+}
+
+/** Day heading with that day's totals on the right. */
+function DayHeading({ day, today, rows }: { day: string; today: string; rows: Entry[] }) {
+  const given = rows.filter((entry) => entry.movement === "delivery").reduce((sum, entry) => sum + entry.quantity, 0);
+  const back = rows.filter((entry) => entry.movement === "return").reduce((sum, entry) => sum + entry.quantity, 0);
+  const billed = rows.filter((entry) => entry.movement === "delivery").reduce((sum, entry) => sum + (entry.amountDue ?? 0), 0);
+  const yesterday = (() => {
+    const d = new Date(`${today}T00:00:00`);
+    d.setDate(d.getDate() - 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  })();
+  const name = day === today ? "Today" : day === yesterday ? "Yesterday" : null;
+  return (
+    <h3 className="flex items-end justify-between gap-3 px-1 pb-2 pt-4">
+      <span className="min-w-0">
+        {name ? <span className="font-display text-lg leading-none">{name}</span> : null}
+        <span className={cn("tabular-nums", name ? "ml-2 text-xs text-muted" : "font-display text-base")}>{formatDay(day)}</span>
+      </span>
+      <span className="shrink-0 text-xs tabular-nums text-muted">
+        {[given ? `${given} given` : "", back ? `${back} back` : "", billed ? rupee(billed, 0) : ""].filter(Boolean).join(" · ")}
+      </span>
+    </h3>
   );
 }

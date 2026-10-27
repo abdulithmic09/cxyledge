@@ -56,6 +56,7 @@ function nextBillNo(entries: Entry[], cancelled: CancelledBill[], date: string) 
 }
 
 export function BillsView({ yard, entries, onChanged }: { yard: YardInfo; entries: Entry[]; onChanged: () => void }) {
+  const [showPreview, setShowPreview] = useState(false);
   const { canEdit, isOwner } = useRole();
   const [tab, setTab] = useState<"new" | "challan" | "all">("new");
   const tracking = useQuery({ queryKey: ["tracking"], queryFn: () => getTracking() });
@@ -282,7 +283,7 @@ export function BillsView({ yard, entries, onChanged }: { yard: YardInfo; entrie
         />
       ) : null}
       {tab === "new" ? (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
           <Panel title={editing ? (editing.startsWith("DC/") ? `Bill for challan ${editing}` : `Editing bill ${editing}`) : "New bill"}>
             <div className="grid gap-3">
               {editing ? (
@@ -293,6 +294,7 @@ export function BillsView({ yard, entries, onChanged }: { yard: YardInfo; entrie
                   </button>
                 </div>
               ) : null}
+              <p className="label -mb-1">1 · Who and when</p>
               <div className="grid grid-cols-2 gap-2">
                 {(["sale", "purchase"] as const).map((item) => (
                   <button key={item} type="button" className={cn("btn", kind === item ? "btn-pine" : "btn-ghost")} onClick={() => setKind(item)}>
@@ -326,6 +328,7 @@ export function BillsView({ yard, entries, onChanged }: { yard: YardInfo; entrie
               </Field>
               {company.trim() && Object.keys(rates).length ? <p className="-mt-1 text-xs text-pine">{Object.keys(rates).length} rates saved for this company. Prices fill in by themselves.</p> : null}
 
+              <p className="label -mb-1 mt-2 border-t border-line pt-3">2 · Gas and cylinders</p>
               <div className="flex flex-col gap-3">
                 {lines.map((line, index) => (
                   <LineEditor
@@ -346,6 +349,7 @@ export function BillsView({ yard, entries, onChanged }: { yard: YardInfo; entrie
                 ) : null}
               </div>
 
+              <p className="label -mb-1 mt-2 border-t border-line pt-3">3 · Amount and payment</p>
               <p className="text-sm">
                 Subtotal <span className="font-semibold tabular-nums">{rupee(goods)}</span>
                 <span className="text-muted"> · {billLines.reduce((sum, line) => sum + line.quantity, 0)} cylinders</span>
@@ -384,18 +388,42 @@ export function BillsView({ yard, entries, onChanged }: { yard: YardInfo; entrie
               {error ? <p className="text-sm text-rust">{error}</p> : null}
               {saved ? <p className="text-sm text-pine">{saved}</p> : null}
               {canEdit ? (
-                <button type="button" className="btn btn-rust" disabled={pending} onClick={() => void save()}>
-                  {pending ? "Saving…" : editing ? "Save changes" : "Save bill"}
-                </button>
+                <div className="grid grid-cols-[auto_1fr] gap-2 lg:grid-cols-1">
+                  <button
+                    type="button"
+                    className="btn btn-ghost lg:hidden"
+                    aria-expanded={showPreview}
+                    onClick={() => {
+                      setShowPreview(true);
+                      window.setTimeout(() => document.getElementById("bill-preview")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+                    }}
+                  >
+                    Preview
+                  </button>
+                  <button type="button" className="btn btn-rust" disabled={pending} onClick={() => void save()}>
+                    {pending ? "Saving…" : editing ? "Save changes" : "Save bill"}
+                  </button>
+                </div>
               ) : (
                 <p className="text-sm text-muted">View-only access: you can preview and print bills, but not save them.</p>
               )}
             </div>
           </Panel>
-          <Panel title="Preview">
+          <div id="bill-preview" className={cn("scroll-mt-20 lg:sticky lg:top-20", !showPreview && canEdit && "hidden lg:block")}>
+          <Panel
+            title="Preview"
+            action={
+              showPreview ? (
+                <button type="button" className="btn btn-ghost h-9 min-h-0 px-3 text-sm lg:hidden" onClick={() => setShowPreview(false)}>
+                  Hide
+                </button>
+              ) : undefined
+            }
+          >
             <BillPreview bill={bill} />
             <ExportButtons onPdf={() => makeBillPdf(bill)} fileName={fileName} shareTitle={`${billNo} · ${yard.name}`} csv={csv} note={exportNote} setNote={setExportNote} />
           </Panel>
+          </div>
         </div>
       ) : null}
     </div>

@@ -299,9 +299,9 @@ export function BillPreview({ bill }: { bill: BillData }) {
           <p className="mt-1 break-words text-[15px] font-bold">{bill.company || "Company"}</p>
           {bill.companyPhone ? <p>Phone {bill.companyPhone}</p> : null}
         </div>
-        <dl className="grid grid-cols-[5rem_1fr] gap-y-0.5 border-t border-[#1c1915] px-3 py-2.5 @md:border-l @md:border-t-0">
+        <dl className="grid grid-cols-[4.5rem_1fr] gap-x-2 gap-y-0.5 border-t border-[#1c1915] px-3 py-2.5 @md:border-l @md:border-t-0">
           <dt className="font-bold">Bill no.</dt>
-          <dd>{bill.billNo || "-"}</dd>
+          <dd className="whitespace-nowrap">{bill.billNo || "-"}</dd>
           <dt className="font-bold">Date</dt>
           <dd className="tabular-nums">{dmy(bill.date)}</dd>
           <dt className="font-bold">Payment</dt>
