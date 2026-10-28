@@ -454,6 +454,32 @@ function EntrySheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, backTotal, backType]);
 
+  // Give / Bought: start with the gas type and payment this company had last time.
+  const [remembered, setRemembered] = useState("");
+  const rememberedFor = useRef("");
+  useEffect(() => {
+    if (editing || (mode !== "give" && mode !== "bought")) return;
+    const name = draft.companyName.trim();
+    if (!name || same(rememberedFor.current, name)) return;
+    const movement = mode === "bought" ? "purchase" : "delivery";
+    let last: Entry | null = null;
+    for (const entry of entries) {
+      if (entry.movement !== movement || !same(entry.companyName, name) || (entry.parentId ?? "").startsWith("plant:")) continue;
+      if (!last || entry.entryDate > last.entryDate || (entry.entryDate === last.entryDate && entry.updatedAt > last.updatedAt)) last = entry;
+    }
+    if (!last) return;
+    rememberedFor.current = name;
+    const prev = last;
+    setDraft((current) => {
+      let next = current;
+      if (!next.cylinderType && prev.cylinderType) next = withType(next, prev.cylinderType);
+      if (next.paymentStatus === "unpaid" && prev.paymentStatus !== "unpaid") next = { ...next, paymentStatus: prev.paymentStatus };
+      return next;
+    });
+    setRemembered(`Filled in from ${prev.companyName}'s last entry.`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft.companyName, mode, editing]);
+
   /** Exchange: send out as many fulls as empties came back. */
   function matchBack() {
     let next = draft;
@@ -772,9 +798,7 @@ function EntrySheet({
                     ))}
                   </datalist>
                 </Field>
-                <Field label="Date" hint={takesBack && !givesOut ? "Take-backs are dated today." : undefined}>
-                  <input type="date" className="field" value={draft.entryDate} disabled={takesBack && !givesOut} onChange={(event) => setDraft({ ...draft, entryDate: event.target.value })} />
-                </Field>
+                <DateLine value={draft.entryDate} locked={takesBack && !givesOut} onChange={(entryDate) => setDraft({ ...draft, entryDate })} />
               </div>
 
               {balance && draft.companyName.trim() && !(mode === "money" && money.direction === "out") ? (
@@ -823,7 +847,11 @@ function EntrySheet({
                     finalTouched={finalTouched}
                     setFinalTouched={setFinalTouched}
                     cylinderTypes={cylinderTypes}
-                    onType={(type) => setDraft(withType(draft, type))}
+                    onType={(type) => {
+                      setRemembered("");
+                      setDraft(withType(draft, type));
+                    }}
+                    remembered={remembered}
                     typeHint={mode === "exchange" && !draft.cylinderType ? backType || undefined : undefined}
                     onUseHint={(type) => setDraft(withType(draft, type))}
                   />
@@ -1034,6 +1062,7 @@ function LineFields({
   onType,
   typeHint,
   onUseHint,
+  remembered,
 }: {
   draft: EntryDraft;
   setDraft: (draft: EntryDraft) => void;
@@ -1043,15 +1072,29 @@ function LineFields({
   onType: (type: string) => void;
   typeHint?: string;
   onUseHint: (type: string) => void;
+  remembered?: string;
 }) {
   const counted = splitSerials(draft.serialNo).length;
   const lineSubtotal = subtotal(draft.quantity, draft.unitPrice);
   const isReturn = draft.movement === "return";
+  const rounded = finalTouched && draft.amountDue != null && lineSubtotal != null && Math.abs(draft.amountDue - lineSubtotal) > 0.004;
+  const [moreOpen, setMoreOpen] = useState(() => Boolean(draft.billNo || draft.note.trim() && draft.note !== "Exchange"));
+  const showMore = moreOpen || rounded;
 
   function applySerials(serialNo: string) {
-    const quantity = draft.qtyOverride ? draft.quantity : splitSerials(serialNo).length;
-    setDraft({ ...draft, serialNo, quantity, amountDue: finalTouched ? draft.amountDue : subtotal(quantity, draft.unitPrice) });
+    const now = splitSerials(serialNo).length;
+    // A typed count stays only while it differs from the serials; otherwise the serials decide.
+    const keep = draft.qtyOverride && draft.quantity !== now && draft.quantity !== counted;
+    const quantity = keep ? draft.quantity : now;
+    setDraft({ ...draft, serialNo, quantity, qtyOverride: keep, amountDue: finalTouched ? draft.amountDue : subtotal(quantity, draft.unitPrice) });
   }
+
+  function applyQty(raw: string) {
+    const quantity = Number(raw.replace(/[^\d]/g, "") || "0");
+    setDraft({ ...draft, quantity, qtyOverride: quantity !== counted, amountDue: finalTouched ? draft.amountDue : subtotal(quantity, draft.unitPrice) });
+  }
+
+  const total = draft.amountDue ?? lineSubtotal;
 
   return (
     <div className="grid gap-3 sm:grid-cols-2">
@@ -1061,45 +1104,20 @@ function LineFields({
           <button type="button" className="mt-1 text-xs font-semibold text-pine underline" onClick={() => onUseHint(typeHint)}>
             Same as the empties: {typeHint}
           </button>
+        ) : remembered && draft.cylinderType ? (
+          <p className="mt-1 text-xs text-pine">{remembered}</p>
         ) : null}
       </div>
       <div className="sm:col-span-2">
-        <Field label="Cylinder serial no." hint={counted ? `${counted} unique serial${counted === 1 ? "" : "s"} counted.` : "One per line, or separated by commas."}>
-          <textarea className="field field-area min-h-24" value={draft.serialNo} onChange={(event) => applySerials(event.target.value)} placeholder={"S-44101\nS-44102"} />
+        <Field label="Cylinder serial no." hint={counted ? `${counted} serial${counted === 1 ? "" : "s"}.` : "One per line, or separated by commas. Leave empty to just type the count."}>
+          <textarea className="field field-area min-h-20" value={draft.serialNo} onChange={(event) => applySerials(event.target.value)} placeholder={"S-44101\nS-44102"} />
         </Field>
       </div>
-      <Field label="No. of cylinders" hint={draft.qtyOverride ? "Manual count." : "Counted from the serials."}>
-        <input
-          className={cn("field tabular-nums", !draft.qtyOverride && "bg-sand")}
-          inputMode="numeric"
-          readOnly={!draft.qtyOverride}
-          value={String(draft.quantity)}
-          onChange={(event) => {
-            const quantity = Number(event.target.value.replace(/[^\d]/g, "") || "0");
-            setDraft({ ...draft, quantity, amountDue: finalTouched ? draft.amountDue : subtotal(quantity, draft.unitPrice) });
-          }}
-        />
-      </Field>
-      <div className="flex items-end">
-        <button
-          type="button"
-          role="switch"
-          aria-checked={draft.qtyOverride}
-          className="btn btn-ghost w-full justify-between"
-          onClick={() => {
-            const qtyOverride = !draft.qtyOverride;
-            const quantity = qtyOverride ? draft.quantity || counted || 1 : counted;
-            setDraft({ ...draft, qtyOverride, quantity, amountDue: finalTouched ? draft.amountDue : subtotal(quantity, draft.unitPrice) });
-          }}
-        >
-          Type the count myself
-          <span className={cn("inline-flex h-7 w-12 items-center rounded-full p-1", draft.qtyOverride ? "bg-brand" : "bg-line")}>
-            <span className={cn("size-5 rounded-full bg-card", draft.qtyOverride && "ml-auto")} />
-          </span>
-        </button>
-      </div>
-      {isReturn ? null : (
-        <>
+      <div className={cn("grid gap-3 sm:col-span-2", isReturn ? "grid-cols-1" : "grid-cols-2")}>
+        <Field label="No. of cylinders" hint={draft.qtyOverride && counted ? `You typed this; the serials count ${counted}.` : counted ? "Counted from the serials." : undefined}>
+          <input className="field tabular-nums" inputMode="numeric" value={draft.quantity ? String(draft.quantity) : ""} placeholder="0" onFocus={(event) => event.target.select()} onChange={(event) => applyQty(event.target.value)} />
+        </Field>
+        {isReturn ? null : (
           <Field label="Price per cylinder (₹)">
             <input
               className="field tabular-nums"
@@ -1112,9 +1130,13 @@ function LineFields({
               }}
             />
           </Field>
-          <div className="rounded-xl border border-line bg-sand px-4 py-3 text-sm">
-            <p>Subtotal {rupee(lineSubtotal)}</p>
-            <p className="text-muted">Quantity × price.</p>
+        )}
+      </div>
+      {isReturn ? null : (
+        <>
+          <div className="flex items-baseline justify-between gap-3 rounded-xl bg-sand px-4 py-2.5 text-sm sm:col-span-2">
+            <span className="text-muted">{rounded ? "Total (rounded)" : draft.quantity && draft.unitPrice != null ? `${draft.quantity} × ${rupee(draft.unitPrice, 0)}` : "Total"}</span>
+            <span className="font-display text-xl tabular-nums">{total != null ? rupee(total, 0) : "—"}</span>
           </div>
           <fieldset className="sm:col-span-2">
             <legend className="mb-1.5 text-sm font-medium">Payment</legend>
@@ -1137,35 +1159,86 @@ function LineFields({
               ))}
             </div>
           </fieldset>
-          <Field label="Final amount (₹)" hint="Change it for a round-off.">
-            <input
-              className="field tabular-nums"
-              inputMode="decimal"
-              value={draft.amountDue ?? ""}
-              placeholder="0"
-              onChange={(event) => {
-                setFinalTouched(true);
-                setDraft({ ...draft, amountDue: moneyInput(event.target.value) });
-              }}
-            />
-          </Field>
           {draft.paymentStatus !== "unpaid" ? (
             <Field label="Amount received (₹)">
               <input className="field tabular-nums" inputMode="decimal" value={draft.amountPaid ?? ""} placeholder="0" onChange={(event) => setDraft({ ...draft, amountPaid: moneyInput(event.target.value) })} />
             </Field>
-          ) : (
-            <span className="hidden sm:block" />
-          )}
-          <Field label="Bill no.">
-            <input className="field" value={draft.billNo} maxLength={40} onChange={(event) => setDraft({ ...draft, billNo: event.target.value })} />
-          </Field>
+          ) : null}
         </>
       )}
-      <Field label="Note">
-        <input className="field" value={draft.note} maxLength={300} onChange={(event) => setDraft({ ...draft, note: event.target.value })} />
-      </Field>
+      <div className="sm:col-span-2">
+        <button type="button" className="flex w-full items-center gap-1.5 py-1 text-left text-sm font-semibold text-pine" aria-expanded={showMore} onClick={() => setMoreOpen(!showMore)}>
+          <ChevronRight className={cn("size-4 transition-transform", showMore && "rotate-90")} aria-hidden />
+          More details
+          <span className="font-normal text-muted">{isReturn ? "note" : "round-off, bill no., note"}</span>
+        </button>
+        {showMore ? (
+          <div className="mt-2 grid gap-3 sm:grid-cols-2">
+            {isReturn ? null : (
+              <>
+                <Field label="Final amount (₹)" hint="Change it for a round-off.">
+                  <input
+                    className="field tabular-nums"
+                    inputMode="decimal"
+                    value={draft.amountDue ?? ""}
+                    placeholder="0"
+                    onChange={(event) => {
+                      setFinalTouched(true);
+                      setDraft({ ...draft, amountDue: moneyInput(event.target.value) });
+                    }}
+                  />
+                </Field>
+                <Field label="Bill no.">
+                  <input className="field" value={draft.billNo} maxLength={40} onChange={(event) => setDraft({ ...draft, billNo: event.target.value })} />
+                </Field>
+              </>
+            )}
+            <div className="sm:col-span-2">
+              <Field label="Note">
+                <input className="field" value={draft.note} maxLength={300} onChange={(event) => setDraft({ ...draft, note: event.target.value })} />
+              </Field>
+            </div>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
+}
+
+/** The date as plain text ("Today · Wed, 28/10/2026"); tap Change to pick another day. */
+function DateLine({ value, locked, onChange }: { value: string; locked: boolean; onChange: (value: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const today = todayISO();
+  const label = value === today ? "Today" : value === shiftDay(today, -1) ? "Yesterday" : "";
+  if (open && !locked) {
+    return (
+      <Field label="Date">
+        <input type="date" className="field" value={value} autoFocus onChange={(event) => event.target.value && onChange(event.target.value)} onBlur={() => setOpen(false)} />
+      </Field>
+    );
+  }
+  return (
+    <div className="flex items-center gap-2 self-end text-sm sm:pb-2.5">
+      <span className="text-muted">Date</span>
+      <span className="font-semibold">
+        {label ? `${label} · ` : ""}
+        {formatDay(value)}
+      </span>
+      {locked ? (
+        <span className="text-xs text-muted">(take-backs are dated today)</span>
+      ) : (
+        <button type="button" className="ml-auto rounded-md px-2 py-1 text-sm font-semibold text-pine underline hover:bg-sand sm:ml-1" onClick={() => setOpen(true)}>
+          Change
+        </button>
+      )}
+    </div>
+  );
+}
+
+function shiftDay(iso: string, days: number) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const date = new Date(y!, (m ?? 1) - 1, (d ?? 1) + days);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
 /* ---------- money received (or paid to a supplier) ---------- */

@@ -479,4 +479,12 @@ export const HINDI: Record<string, string> = {
   "Undone. It's back the way it was.": "वापस कर दिया। पहले जैसा हो गया।",
   "Undone. It's back.": "वापस कर दिया। वापस आ गया।",
   "Undone. It's in Settings → Recently deleted.": "वापस कर दिया। यह सेटिंग्स → हाल में हटाए गए में है।",
+  // Shorter entry form
+  "More details": "और जानकारी",
+  Change: "बदलें",
+  note: "नोट",
+  "Total (rounded)": "कुल (राउंड किया)",
+  "round-off, bill no., note": "राउंड-ऑफ़, बिल नं., नोट",
+  "(take-backs are dated today)": "(वापसी आज की तारीख में होती है)",
+  "One per line, or separated by commas. Leave empty to just type the count.": "हर लाइन में एक, या कॉमा से अलग करें। सिर्फ़ गिनती लिखनी हो तो खाली छोड़ें।",
 };
