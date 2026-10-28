@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDownLeft, ArrowUpRight, BellRing, ChevronLeft, ChevronRight, FileText, IndianRupee, MessageCircle, MoreHorizontal, Phone, Receipt, Search, Share2, Tags } from "lucide-react";
+import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, BellRing, ChevronLeft, ChevronRight, FileText, IndianRupee, MessageCircle, MoreHorizontal, Phone, Receipt, Search, Share2, Tags } from "lucide-react";
 import { deleteDocument, listCompanyMeta, restoreDeleted, saveCompanyMeta, saveDocument, type DocRecord, type Entry, type Payment, type YardInfo } from "@/lib/inventory/api";
 import { companyBalances, companyLedger, movementLabel, openOrders, paymentLabel, type CompanyBalance } from "@/lib/inventory/analyse";
 import { daysBetween } from "@/lib/inventory/stock";
@@ -45,6 +45,7 @@ export function CustomersView({
   onOpenBills: () => void;
 }) {
   const [selected, setSelected] = useState<string | null>(initialCompany ?? null);
+  const { canEdit } = useRole();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [showReminders, setShowReminders] = useState(false);
@@ -213,20 +214,20 @@ export function CustomersView({
         </div>
       ) : (
         <div className="card overflow-hidden">
-          <div className={cn("label hidden grid-cols-[minmax(0,1fr)_3.5rem_6rem] gap-3 border-b border-line bg-sand/50 px-4 py-2.5", !wide && "sm:grid")}>
+          <div className={cn("label hidden grid-cols-[minmax(0,1fr)_3.5rem_6.75rem] gap-3 border-b border-line bg-sand/50 py-2.5 pl-4", !wide && "sm:grid")}>
             <span className="pl-12">Company</span>
             <span className="text-right">Out</span>
-            <span className="text-right">To collect</span>
+            <span className="pr-4 text-right">To collect</span>
           </div>
           <ul>
             {rows.map((row) => {
               const overdue = late.get(row.company) ?? 0;
               return (
-                <li key={row.company} className="border-b border-line last:border-b-0">
+                <li key={row.company} className={cn("flex items-stretch border-b border-line last:border-b-0", selected === row.company && wide && "bg-brand-soft/60")}>
                   <button
                     type="button"
                     aria-current={selected === row.company ? "true" : undefined}
-                    className={cn("grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left hover:bg-sand/60", !wide && "sm:grid-cols-[minmax(0,1fr)_3.5rem_6rem]", selected === row.company && wide && "bg-brand-soft/60 hover:bg-brand-soft/60")}
+                    className={cn("grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)] items-center gap-3 py-3 pl-4 pr-3 text-left hover:bg-sand/60", !wide && "sm:grid-cols-[minmax(0,1fr)_3.5rem]", selected === row.company && wide && "hover:bg-transparent")}
                     onClick={() => setSelected(row.company)}
                   >
                     <span className="flex min-w-0 items-center gap-3">
@@ -252,11 +253,27 @@ export function CustomersView({
                       </span>
                     </span>
                     <span className={cn("hidden text-right font-display text-lg tabular-nums", !wide && "sm:block", !row.outstandingQty && "text-muted")}>{row.outstandingQty}</span>
-                    <span className="text-right">
-                      <span className={cn("block font-display text-lg tabular-nums", overdue ? "text-rust" : row.toCollect ? "text-gold" : "text-muted")}>{row.toCollect ? rupee(row.toCollect, 0) : "—"}</span>
-                      <span className={cn("block text-xs text-muted", !wide && "sm:hidden")}>{row.outstandingQty} out</span>
-                    </span>
                   </button>
+                  {row.toCollect && canEdit ? (
+                    <button
+                      type="button"
+                      className="group flex w-[6.75rem] shrink-0 flex-col items-end justify-center py-3 pl-1 pr-4 text-right hover:bg-gold-soft/60"
+                      aria-label={`Collect money from ${row.company}`}
+                      title="Collect money"
+                      onClick={() => openEntrySheet({ mode: "money", company: row.company })}
+                    >
+                      <span className={cn("block font-display text-lg tabular-nums", overdue ? "text-rust" : "text-gold")}>{rupee(row.toCollect, 0)}</span>
+                      <span className="inline-flex items-center gap-0.5 rounded-full bg-gold-soft px-2 py-0.5 text-[0.7rem] font-semibold text-gold group-hover:bg-gold group-hover:text-white">
+                        <IndianRupee className="size-3" aria-hidden />
+                        Collect
+                      </span>
+                    </button>
+                  ) : (
+                    <button type="button" tabIndex={-1} className="flex w-[6.75rem] shrink-0 flex-col items-end justify-center py-3 pl-1 pr-4 text-right hover:bg-sand/60" onClick={() => setSelected(row.company)}>
+                      <span className={cn("block font-display text-lg tabular-nums", row.toCollect ? "text-gold" : "text-muted")}>{row.toCollect ? rupee(row.toCollect, 0) : "—"}</span>
+                      <span className={cn("block text-xs text-muted", !wide && "sm:hidden")}>{row.outstandingQty} out</span>
+                    </button>
+                  )}
                 </li>
               );
             })}
@@ -433,6 +450,9 @@ function CompanyPage({
               <>
                 <button type="button" className="btn bg-white/12 text-white ring-1 ring-white/15 hover:bg-white/20" onClick={() => openEntrySheet({ mode: "take", company })}>
                   <ArrowDownLeft className="size-5" aria-hidden /> Take back
+                </button>
+                <button type="button" className="btn bg-white/12 text-white ring-1 ring-white/15 hover:bg-white/20" onClick={() => openEntrySheet({ mode: "exchange", company })}>
+                  <ArrowLeftRight className="size-5" aria-hidden /> Exchange
                 </button>
                 <button type="button" className="btn bg-white/12 text-white ring-1 ring-white/15 hover:bg-white/20" onClick={() => onOpenBills()}>
                   <Receipt className="size-5" aria-hidden /> Make bill

@@ -14,7 +14,8 @@ import { cn } from "@/lib/cn";
 import { TypePicker } from "@/components/yard/type-picker";
 import { Field, PageHead, Panel, Tally } from "@/components/yard/ui";
 import { takeCylinderRequest } from "@/lib/inventory/nav-requests";
-import { openEntrySheet } from "@/components/yard/entry-launcher";
+import { offerUndo, openEntrySheet } from "@/components/yard/entry-launcher";
+import type { UndoTarget } from "@/lib/inventory/entry-actions";
 
 type Note = { tone: "ok" | "bad"; text: string } | null;
 
@@ -214,6 +215,7 @@ function PlantPanel({ yard, moves, onSaved }: { yard: YardInfo; moves: StockMove
         return;
       }
       setStatus({ tone: "ok", text: `${counted || qty} × ${gasType} ${kind === "to_plant" ? "sent to" : "back from"} ${plant}.${refillTotal ? ` Refill charges ${rupee(refillTotal, 0)} added to ${plant}'s account.` : ""}` });
+      offerUndo({ text: `${counted || qty} × ${gasType} ${kind === "to_plant" ? "sent to" : "back from"} ${plant}.`, undo: [{ kind: "stockMove", id: result.id }] });
       setSerials("");
       setPaidNow("");
       setBillNo("");
@@ -319,6 +321,7 @@ function CountPanel({ yard, onSaved }: { yard: YardInfo; onSaved: () => void }) 
         return;
       }
       setStatus({ tone: "ok", text: `Count saved for ${gasType}.` });
+      offerUndo({ text: `Count saved for ${gasType}.`, undo: [{ kind: "stockMove", id: result.id }] });
       setFull("");
       setEmpty("");
       onSaved();
@@ -616,7 +619,12 @@ function HoldingPanel({
                       type="button"
                       className="grid size-8 place-items-center rounded-md text-muted hover:bg-sand hover:text-rust"
                       aria-label={`Remove ${charge.receiptNo}`}
-                      onClick={() => void deletePayment({ data: charge.id }).then(() => onChanged())}
+                      onClick={() =>
+                        void deletePayment({ data: charge.id }).then((result) => {
+                          if (result.ok) offerUndo({ text: `${charge.receiptNo} removed.`, undo: [{ kind: "restore", table: "payment", id: charge.id }] });
+                          onChanged();
+                        })
+                      }
                     >
                       <Trash2 className="size-4" aria-hidden />
                     </button>
@@ -670,7 +678,12 @@ function MovesList({ moves, onChanged }: { moves: StockMove[]; onChanged: () => 
               </p>
             </div>
             {isOwner ? (
-              <button type="button" className="grid size-8 shrink-0 place-items-center rounded-md text-muted hover:bg-sand hover:text-rust" aria-label="Remove this record" onClick={() => void deleteStockMove({ data: move.id }).then(onChanged)}>
+              <button type="button" className="grid size-8 shrink-0 place-items-center rounded-md text-muted hover:bg-sand hover:text-rust" aria-label="Remove this record" onClick={() =>
+                  void deleteStockMove({ data: move.id }).then((result) => {
+                    if (result.ok) offerUndo({ text: "Record removed.", undo: [{ kind: "restore", table: "stockMove", id: move.id }] });
+                    onChanged();
+                  })
+                }>
                 <Trash2 className="size-4" aria-hidden />
               </button>
             ) : null}
@@ -710,6 +723,7 @@ function CountWizard({ rows, types, onClose, onSaved }: { rows: ReturnType<typeo
   async function saveAll() {
     setBusy(true);
     setNote(null);
+    const saved: UndoTarget[] = [];
     try {
       for (const item of filled) {
         const row = counts[item]!;
@@ -720,7 +734,9 @@ function CountWizard({ rows, types, onClose, onSaved }: { rows: ReturnType<typeo
           setNote({ tone: "bad", text: `${item}: ${result.error}` });
           return;
         }
+        saved.push({ kind: "stockMove", id: result.id });
       }
+      offerUndo({ text: `Stock count saved for ${saved.length} gas${saved.length === 1 ? "" : "es"}.`, undo: saved });
       onSaved();
     } catch {
       setNote({ tone: "bad", text: "Couldn't save. Check your internet connection." });

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, ChevronLeft, ChevronRight, IndianRupee, PackagePlus, Plus, X } from "lucide-react";
 import {
   createEntry,
@@ -39,6 +39,15 @@ export type Mode = "give" | "take" | "exchange" | "bought" | "money";
 const OPEN_EVENT = "cx:entry-sheet";
 const SHOW_EVENT = "cx:show-entry";
 let pendingShow: string | null = null;
+
+const UNDO_EVENT = "cx:undo-offer";
+
+export type UndoOffer = { text: string; undo?: UndoTarget[]; revert?: () => Promise<{ ok: boolean; error?: string }>; doneText?: string };
+
+/** Show the "Saved · Undo" bar from anywhere in the app, for 10 seconds. */
+export function offerUndo(offer: UndoOffer) {
+  window.dispatchEvent(new CustomEvent(UNDO_EVENT, { detail: offer }));
+}
 
 export function openEntrySheet(options: { entry?: Entry; mode?: Mode; company?: string; payOut?: boolean } = {}) {
   window.dispatchEvent(new CustomEvent(OPEN_EVENT, { detail: options }));
@@ -139,7 +148,18 @@ function fingerprint(draft: EntryDraft) {
 
 /* ---------- the launcher: + button, sheet and the "Saved" note ---------- */
 
-type Toast = { text: string; undo: UndoTarget[]; entryId: string | null; receipt?: Payment; balanceAfter?: number | null; billFor?: Entry };
+type Toast = {
+  text: string;
+  undo: UndoTarget[];
+  entryId: string | null;
+  receipt?: Payment;
+  balanceAfter?: number | null;
+  billFor?: Entry;
+  /** Undo by running this instead of the server's undo (used to put an edit back the way it was). */
+  revert?: () => Promise<{ ok: boolean; error?: string }>;
+  /** What to say once it's undone. */
+  doneText?: string;
+};
 
 export function EntryLauncher({
   yard,
@@ -159,6 +179,7 @@ export function EntryLauncher({
   onOpenBills: () => void;
 }) {
   const { canEdit } = useRole();
+  const client = useQueryClient();
   const [sheet, setSheet] = useState<{ key: number; mode: Mode | null; entry: Entry | null; company: string; payOut?: boolean } | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   const [undoNote, setUndoNote] = useState("");
@@ -223,6 +244,17 @@ export function EntryLauncher({
   }, []);
 
   useEffect(() => {
+    const listener = (event: Event) => {
+      const offer = (event as CustomEvent<UndoOffer>).detail;
+      if (!offer) return;
+      setUndoNote("");
+      setToast({ text: offer.text, undo: offer.undo ?? [], entryId: null, revert: offer.revert, doneText: offer.doneText });
+    };
+    window.addEventListener(UNDO_EVENT, listener);
+    return () => window.removeEventListener(UNDO_EVENT, listener);
+  }, []);
+
+  useEffect(() => {
     if (!toast) return;
     const timer = window.setTimeout(() => setToast(null), 10000);
     return () => window.clearTimeout(timer);
@@ -234,10 +266,12 @@ export function EntryLauncher({
     if (!toast) return;
     setUndoing(true);
     try {
-      const result = await undoRecent({ data: toast.undo });
-      setUndoNote(result.ok ? "Undone. The line is in Settings → Recently deleted." : result.error);
+      const result = toast.revert ? await toast.revert() : await undoRecent({ data: toast.undo });
+      const restoring = toast.undo.some((target) => target.kind === "restore");
+      setUndoNote(result.ok ? (toast.doneText ?? (toast.revert ? "Undone. It's back the way it was." : restoring ? "Undone. It's back." : "Undone. It's in Settings → Recently deleted.")) : (result.error ?? "Couldn't undo."));
       if (result.ok) setToast(null);
       onChanged();
+      void client.invalidateQueries();
     } catch {
       setUndoNote("Couldn't undo. Check your internet connection.");
     } finally {
@@ -256,6 +290,7 @@ export function EntryLauncher({
         >
           <Plus className="size-5" strokeWidth={2.75} aria-hidden />
           New entry
+          <kbd className="ml-1 hidden rounded border border-current/30 px-1 text-[0.65rem] font-semibold opacity-70 lg:inline">N</kbd>
         </button>
       ) : null}
 
@@ -313,7 +348,7 @@ export function EntryLauncher({
                     View in book
                   </button>
                 ) : null}
-                {toast.undo.length ? (
+                {toast.undo.length || toast.revert ? (
                   <button type="button" className="" disabled={undoing} onClick={() => void undo()}>
                     {undoing ? "Undoing…" : "Undo"}
                   </button>
@@ -409,6 +444,23 @@ function EntrySheet({
   const takesBack = mode === "take" || mode === "exchange";
   const givesOut = mode === "give" || mode === "exchange" || mode === "bought";
   const backTotal = orders.reduce((sum, order) => sum + (order.leftSerials.length ? (picks[order.entry.id]?.length ?? 0) : (counts[order.entry.id] ?? 0)), 0);
+  // The gas type of the empties being taken back, so the fulls going out can default to it.
+  const backType = useMemo(() => {
+    const picked = orders.find((order) => (order.leftSerials.length ? (picks[order.entry.id]?.length ?? 0) : (counts[order.entry.id] ?? 0)) > 0);
+    return (picked ?? orders[0])?.entry.cylinderType ?? "";
+  }, [orders, picks, counts]);
+  useEffect(() => {
+    if (mode === "exchange" && backTotal > 0 && backType && !draft.cylinderType) setDraft((current) => (current.cylinderType ? current : withType(current, backType)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, backTotal, backType]);
+
+  /** Exchange: send out as many fulls as empties came back. */
+  function matchBack() {
+    let next = draft;
+    if (!next.cylinderType && backType) next = withType(next, backType);
+    const counted = splitSerials(next.serialNo).length;
+    setDraft({ ...next, quantity: backTotal, qtyOverride: counted !== backTotal, amountDue: finalTouched ? next.amountDue : subtotal(backTotal, next.unitPrice) });
+  }
   const [initial] = useState(() => fingerprint(draft));
   const dirty = fingerprint(draft) !== initial || backTotal > 0 || Boolean(money.amount || money.reference || money.note);
 
@@ -546,7 +598,8 @@ function EntrySheet({
           setError(result.error);
           return;
         }
-        onSaved({ text: `Changes saved for ${company}.`, undo: [], entryId: editing.id });
+        const before = { ...draftFrom(editing), id: editing.id };
+        onSaved({ text: `Changes saved for ${company}.`, undo: [], entryId: editing.id, revert: () => updateEntry({ data: before }) });
         return;
       }
       const result = await createEntry({ data: giving.value });
@@ -760,6 +813,8 @@ function EntrySheet({
                 </Section>
               ) : null}
 
+              {mode === "exchange" && draft.companyName.trim() ? <ExchangeBalance back={backTotal} out={draft.quantity} onMatch={matchBack} /> : null}
+
               {givesOut ? (
                 <Section title={mode === "exchange" ? "Full cylinders going out" : mode === "bought" ? "What you bought" : editing ? "Line" : "Cylinders going out"} tone={mode === "bought" ? undefined : "rust"} plain={mode !== "exchange"}>
                   <LineFields
@@ -769,7 +824,7 @@ function EntrySheet({
                     setFinalTouched={setFinalTouched}
                     cylinderTypes={cylinderTypes}
                     onType={(type) => setDraft(withType(draft, type))}
-                    typeHint={mode === "exchange" && !draft.cylinderType ? orders[0]?.entry.cylinderType : undefined}
+                    typeHint={mode === "exchange" && !draft.cylinderType ? backType || undefined : undefined}
                     onUseHint={(type) => setDraft(withType(draft, type))}
                   />
                 </Section>
@@ -952,6 +1007,23 @@ function TakeBackFields({
 }
 
 /* ---------- give / bought: one line of cylinders with price and payment ---------- */
+
+/** Exchange: how the empties coming back compare with the fulls going out. */
+function ExchangeBalance({ back, out, onMatch }: { back: number; out: number; onMatch: () => void }) {
+  const even = back > 0 && back === out;
+  const text = !back && !out ? "Pick the empties coming back, then the fulls going out." : even ? "Balanced" : back > out ? `${back - out} more back than going out` : `${out - back} more going out than came back`;
+  return (
+    <div className={cn("flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border px-3.5 py-2.5 text-sm", even ? "border-pine/30 bg-pine/10" : "border-line bg-sand/60")} role="status">
+      <span className="font-display text-lg tabular-nums">{back} back · {out} out</span>
+      <span className={cn("text-xs font-semibold", even ? "text-pine" : "text-muted")}>{text}</span>
+      {back > 0 && back !== out ? (
+        <button type="button" className="btn btn-ghost ml-auto h-9 min-h-0 px-3 text-sm" onClick={onMatch}>
+          Send {back} out
+        </button>
+      ) : null}
+    </div>
+  );
+}
 
 function LineFields({
   draft,

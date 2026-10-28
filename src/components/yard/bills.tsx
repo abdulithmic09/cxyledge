@@ -15,6 +15,7 @@ import { BillPreview, BillRegister, groupBills, type SavedBill } from "@/compone
 import { ChallanForm } from "@/components/yard/challan-form";
 import { getTracking } from "@/lib/inventory/tracking";
 import { clearBillRequest, peekBillRequest } from "@/lib/inventory/nav-requests";
+import { offerUndo } from "@/components/yard/entry-launcher";
 
 type BillKind = "sale" | "purchase";
 
@@ -229,6 +230,7 @@ export function BillsView({ yard, entries, onChanged }: { yard: YardInfo; entrie
         return;
       }
       setSaved(editing ? `Bill ${billNo} updated. The new PDF is in ${company.trim()}'s files.` : `Bill ${billNo} saved in the book and in ${company.trim()}'s files.`);
+      if (!editing) offerUndo({ text: `Bill ${billNo} saved.`, undo: [{ kind: "bill", billNo }], doneText: `Bill ${billNo} taken back. It's in Settings → Recently deleted.` });
       resetForm();
       onChanged();
     } catch {

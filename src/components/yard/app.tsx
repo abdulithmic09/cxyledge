@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Boxes, Building2, CalendarCheck, ChevronRight, Cylinder, LayoutList, MoreHorizontal, PieChart, Receipt, Settings, Users } from "lucide-react";
 import { SignInPanel } from "@/components/yard/sign-in-panel";
@@ -21,6 +21,7 @@ import { SettingsHome } from "@/components/yard/settings-home";
 import { UsersView } from "@/components/yard/users";
 import { EntryLauncher, showInBook } from "@/components/yard/entry-launcher";
 import { GlobalSearch } from "@/components/yard/global-search";
+import { KeyboardShortcuts, type ShortcutView } from "@/components/yard/shortcuts";
 import { useBookEntries } from "@/lib/inventory/book-sync";
 import { requestBillEdit, requestCylinder } from "@/lib/inventory/nav-requests";
 
@@ -137,6 +138,11 @@ function SignedOut() {
 function Shell({ userId }: { userId: string }) {
   const [view, setView] = useState<View>("book");
   const [focusCompany, setFocusCompany] = useState<string | null>(null);
+  const goTo = useCallback((next: ShortcutView) => {
+    setFocusCompany(null);
+    setView(next);
+    window.scrollTo({ top: 0 });
+  }, []);
   // Bumped when another screen hands something over, so Bills and Stock open fresh with it.
   const [visit, setVisit] = useState(0);
   const [joinNote, setJoinNote] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
@@ -303,6 +309,7 @@ function Shell({ userId }: { userId: string }) {
                 </button>
               );
             })}
+            <KeyboardShortcuts onGo={goTo} />
           </nav>
         </aside>
         <main className="min-w-0 px-4 py-4 pb-40 lg:px-8 lg:py-6 lg:pb-24">

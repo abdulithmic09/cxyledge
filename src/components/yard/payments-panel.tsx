@@ -10,6 +10,7 @@ import { ExportBar } from "@/components/yard/export-bar";
 import { ExportButtons } from "@/components/yard/bills";
 import { makeReceiptPdf, pdfName, type ReceiptData } from "@/lib/inventory/bill-pdf";
 import { Field, Panel } from "@/components/yard/ui";
+import { offerUndo } from "@/components/yard/entry-launcher";
 
 function todayISO() {
   const date = new Date();
@@ -103,6 +104,7 @@ export function PaymentsPanel({
       }
       setSaved(`${result.payment.receiptNo} saved: ${rupee(value)} ${direction === "in" ? "received from" : "paid to"} ${company}.`);
       setReceipt(result.payment.id);
+      offerUndo({ text: `${result.payment.receiptNo} saved: ${rupee(value, 0)}.`, undo: [{ kind: "payment", id: result.payment.id }] });
       setAmount("");
       setReference("");
       setBillNo("");

@@ -11,6 +11,7 @@ import { todayISO } from "@/lib/inventory/model";
 import { useRole } from "@/lib/inventory/role";
 import { cn } from "@/lib/cn";
 import { Field, Panel } from "@/components/yard/ui";
+import { offerUndo } from "@/components/yard/entry-launcher";
 
 const modeLabel = (mode: string) => PAYMENT_MODES.find((item) => item.id === mode)?.label ?? mode;
 
@@ -60,6 +61,7 @@ export function DepositsPanel({ yard, company }: { yard: YardInfo; company: stri
         return;
       }
       setStatus({ tone: "ok", text: `${result.receiptNo} saved. Tap the receipt below to download it.` });
+      offerUndo({ text: `Deposit ${result.receiptNo} saved.`, undo: [{ kind: "deposit", id: result.id }] });
       setAmount("");
       setCylinders("");
       setSerials("");
@@ -150,7 +152,12 @@ export function DepositsPanel({ yard, company }: { yard: YardInfo; company: stri
                     type="button"
                     className="grid size-9 place-items-center rounded-lg text-muted hover:bg-sand hover:text-rust"
                     aria-label={`Remove ${deposit.receiptNo}`}
-                    onClick={() => void deleteDeposit({ data: deposit.id }).then(() => client.invalidateQueries({ queryKey: ["tracking"] }))}
+                    onClick={() =>
+                      void deleteDeposit({ data: deposit.id }).then((result) => {
+                        if (result.ok) offerUndo({ text: `Deposit ${deposit.receiptNo} removed.`, undo: [{ kind: "restore", table: "deposit", id: deposit.id }] });
+                        return client.invalidateQueries({ queryKey: ["tracking"] });
+                      })
+                    }
                   >
                     <Trash2 className="size-4" aria-hidden />
                   </button>
