@@ -6,7 +6,7 @@ import { dueRows, type DueBill } from "@/lib/inventory/dues";
 
 /** What a company sees when it opens its statement link. Nothing about other customers. */
 export type PublicStatement = {
-  yard: { name: string; address: string; phone: string; logo: string };
+  yard: { name: string; address: string; phone: string; email?: string; logo: string };
   company: string;
   asOf: string;
   toCollect: number;
@@ -92,8 +92,8 @@ export const readStatement = createServerFn({ method: "GET" })
     `;
     const link = links[0];
     if (!link) return { ok: false };
-    const yardRows = await sql<{ name: string; address: string; phone: string; logo: string; credit_days: number }>`
-      select name, address, phone, logo, credit_days from yards where id = ${link.yard_id}
+    const yardRows = await sql<{ name: string; address: string; phone: string; email: string | null; logo: string; credit_days: number }>`
+      select name, address, phone, email, logo, credit_days from yards where id = ${link.yard_id}
     `;
     const yard = yardRows[0];
     if (!yard) return { ok: false };
@@ -130,7 +130,7 @@ export const readStatement = createServerFn({ method: "GET" })
     return {
       ok: true,
       statement: {
-        yard: { name: yard.name, address: yard.address ?? "", phone: yard.phone ?? "", logo: yard.logo ?? "" },
+        yard: { name: yard.name, address: yard.address ?? "", phone: yard.phone ?? "", email: yard.email ?? "", logo: yard.logo ?? "" },
         company,
         asOf: new Date().toISOString(),
         toCollect: balance?.toCollect ?? 0,

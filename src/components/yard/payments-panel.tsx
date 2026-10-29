@@ -25,7 +25,7 @@ const modeLabel = (mode: PaymentMode) => PAYMENT_MODES.find((item) => item.id ==
 
 export function receiptLines(yard: YardInfo, payment: Payment, balanceAfter: number | null): string[] {
   const received = payment.direction === "in";
-  const letterhead = [yard.address.replace(/\n/g, ", "), [yard.phone && `Phone ${yard.phone}`, yard.gst && `GST ${yard.gst}`].filter(Boolean).join(" · ")].filter(Boolean);
+  const letterhead = [yard.address.replace(/\n/g, ", "), [yard.phone && `Phone ${yard.phone}`, yard.email && `Email ${yard.email}`, yard.gst && `GST ${yard.gst}`].filter(Boolean).join(" · ")].filter(Boolean);
   return [
     yard.name,
     ...letterhead,

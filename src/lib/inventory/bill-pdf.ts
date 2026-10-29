@@ -269,6 +269,22 @@ function titleBar(p: Page, title: string, top = FT): number {
   return top + 20;
 }
 /** Business name, address and tax ids, centred. Returns the y below the ruled line. */
+/** The address in at most two tidy lines: split at the comma nearest the middle, not wherever the width runs out. */
+function addressLines(address: string, size: number, maxWidth: number): string[] {
+  const flat = address.replace(/\s*\n\s*/g, ", ").replace(/\s+/g, " ").trim();
+  if (!flat) return [];
+  if (textWidth(flat, size, false) <= maxWidth) return [flat];
+  const commas = [...flat.matchAll(/,\s*/g)].map((m) => m.index!);
+  if (commas.length) {
+    const mid = flat.length / 2;
+    const at = commas.reduce((best, index) => (Math.abs(index - mid) < Math.abs(best - mid) ? index : best), commas[0]!);
+    const first = flat.slice(0, at + 1).trim();
+    const second = flat.slice(at + 1).trim();
+    if (textWidth(first, size, false) <= maxWidth && textWidth(second, size, false) <= maxWidth) return [first, second];
+  }
+  return wrap(flat, size, maxWidth).filter(Boolean).slice(0, 2);
+}
+
 function firmBlock(p: Page, yard: YardInfo, logo: Logo | null, top: number): number {
   let y = top + 24;
   if (logo) {
@@ -278,8 +294,9 @@ function firmBlock(p: Page, yard: YardInfo, logo: Logo | null, top: number): num
   }
   p.text(yard.name.toUpperCase(), W / 2, y, 16, { bold: true, align: "center", spacing: 0.4 });
   y += 15;
-  const addrLines = yard.address ? wrap(yard.address.replace(/\s*\n\s*/g, ", "), 9, FR - FX - (logo ? 260 : 60)).filter(Boolean).slice(0, 2) : [];
-  if (yard.phone) addrLines.push(`Phone ${yard.phone}`);
+  const addrLines = yard.address ? addressLines(yard.address, 9, Math.min(340, FR - FX - (logo ? 260 : 60))) : [];
+  const contact = [yard.phone && `Phone: ${yard.phone}`, yard.email && `Email: ${yard.email}`].filter(Boolean).join("   |   ");
+  if (contact) addrLines.push(contact);
   for (const line of addrLines) {
     p.text(line, W / 2, y, 9, { align: "center" });
     y += 11.5;

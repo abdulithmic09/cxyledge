@@ -39,6 +39,7 @@ export type YardInfo = {
   gst: string;
   pan: string;
   phone: string;
+  email: string;
   logo: string;
   lastBackupAt: string | null;
   /** The book's cylinder types, in the order shown when booking. */
@@ -119,6 +120,7 @@ export type Letterhead = {
   gst: string;
   pan: string;
   phone: string;
+  email?: string;
   logo: string;
 };
 
@@ -223,6 +225,7 @@ type YardRow = {
   gst: string;
   pan: string;
   phone: string;
+  email?: string | null;
   logo: string;
   last_backup_at?: string | null;
   cylinder_types?: string | null;
@@ -291,7 +294,7 @@ export async function ensureYard(userId: string): Promise<YardInfo> {
   await sql`insert into profiles (user_id) values (${userId}) on conflict (user_id) do nothing`;
 
   const linked = await sql<YardRow>`
-    select y.id, y.name, y.invite_code, m.role, y.address, y.gst, y.pan, y.phone, y.logo, y.last_backup_at::text as last_backup_at, y.cylinder_types
+    select y.id, y.name, y.invite_code, m.role, y.address, y.gst, y.pan, y.phone, y.email, y.logo, y.last_backup_at::text as last_backup_at, y.cylinder_types
     from profiles p
     join yards y on y.id = p.active_yard_id
     join yard_members m on m.yard_id = y.id and m.user_id = p.user_id
@@ -300,7 +303,7 @@ export async function ensureYard(userId: string): Promise<YardInfo> {
   let current = linked[0];
   if (!current) {
     const any = await sql<YardRow>`
-      select y.id, y.name, y.invite_code, m.role, y.address, y.gst, y.pan, y.phone, y.logo, y.last_backup_at::text as last_backup_at, y.cylinder_types
+      select y.id, y.name, y.invite_code, m.role, y.address, y.gst, y.pan, y.phone, y.email, y.logo, y.last_backup_at::text as last_backup_at, y.cylinder_types
       from yard_members m
       join yards y on y.id = m.yard_id
       where m.user_id = ${userId}
@@ -382,6 +385,7 @@ function mapYard(current: YardRow, members: number, yards: Array<{ id: string; n
     gst: current.gst ?? "",
     pan: current.pan ?? "",
     phone: current.phone ?? "",
+    email: current.email ?? "",
     logo: current.logo ?? "",
     lastBackupAt: current.last_backup_at ?? null,
     cylinderTypes: readTypes(current.cylinder_types),
@@ -738,14 +742,16 @@ export const saveLetterhead = createServerFn({ method: "POST" })
     const address = data.address.trim().slice(0, 240);
     const gst = data.gst.trim().slice(0, 20);
     const pan = data.pan.trim().slice(0, 12);
-    const phone = data.phone.trim().slice(0, 24);
+    const phone = data.phone.trim().slice(0, 40);
+    const email = String(data.email ?? "").trim().slice(0, 80);
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false as const, error: "That email doesn't look right." };
     const logo = data.logo.startsWith("data:image/") ? data.logo.slice(0, 120_000) : "";
     if (data.logo && !logo) return { ok: false as const, error: "Logo needs to be a small image." };
     const yard = await ensureYard(context.userId);
     if (!isOwner(yard)) return { ok: false as const, error: NEED_OWNER };
     const sql = await sqlClient();
     await sql`
-      update yards set address = ${address}, gst = ${gst}, pan = ${pan}, phone = ${phone}, logo = ${logo}
+      update yards set address = ${address}, gst = ${gst}, pan = ${pan}, phone = ${phone}, email = ${email}, logo = ${logo}
       where id = ${yard.id}
     `;
     await logActivity(yard.id, context.userId, "Updated letterhead");
@@ -1359,7 +1365,7 @@ export type BackupFile = {
   format: "cxyledge-backup";
   version: 1;
   exportedAt: string;
-  book: { name: string; address: string; gst: string; pan: string; phone: string; logo: string };
+  book: { name: string; address: string; gst: string; pan: string; phone: string; email?: string; logo: string };
   members: Array<{ name: string; email: string; role: Role }>;
   entries: Array<Entry>;
   returnLogs: Array<ReturnLog>;
@@ -1413,7 +1419,7 @@ export const exportBackup = createServerFn({ method: "POST" })
       format: "cxyledge-backup",
       version: 1,
       exportedAt: new Date().toISOString(),
-      book: { name: yard.name, address: yard.address, gst: yard.gst, pan: yard.pan, phone: yard.phone, logo: yard.logo },
+      book: { name: yard.name, address: yard.address, gst: yard.gst, pan: yard.pan, phone: yard.phone, email: yard.email, logo: yard.logo },
       members: members.map((row) => ({ name: row.name ?? "", email: row.email ?? "", role: normalizeRole(row.role) })),
       entries: entries.map(mapEntry),
       returnLogs: logs.map((row) => ({ id: row.id, entryId: row.entry_id, companyName: row.company_name, serials: row.serials, quantity: Number(row.quantity), actor: row.actor, createdAt: row.created_at })),
@@ -1453,7 +1459,7 @@ export const startRestore = createServerFn({ method: "POST" })
     const sql = await sqlClient();
     await sql`
       update yards set address = ${String(book.address ?? "").slice(0, 240)}, gst = ${String(book.gst ?? "").slice(0, 20)},
-        pan = ${String(book.pan ?? "").slice(0, 12)}, phone = ${String(book.phone ?? "").slice(0, 24)}, logo = ${logo}
+        pan = ${String(book.pan ?? "").slice(0, 12)}, phone = ${String(book.phone ?? "").slice(0, 40)}, email = ${String(book.email ?? "").slice(0, 80)}, logo = ${logo}
       where id = ${created.id}
     `;
     await logActivity(created.id, context.userId, "Restored from backup", name);

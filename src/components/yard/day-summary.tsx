@@ -156,7 +156,7 @@ section{margin-bottom:16px;break-inside:avoid}
 .empty{color:#6b6257;font-style:italic}
 footer{margin-top:18px;padding-top:8px;border-top:1px solid #e4dccd;font-size:8.5pt;color:#6b6257;display:flex;justify-content:space-between}
 </style></head><body>
-<header><div class="brand">${yard.logo ? `<img src="${esc(yard.logo)}" alt="">` : ""}<div><div class="name">${esc(yard.name)}</div><div class="addr">${esc([yard.address, yard.phone].filter(Boolean).join(" · "))}</div></div></div>
+<header><div class="brand">${yard.logo ? `<img src="${esc(yard.logo)}" alt="">` : ""}<div><div class="name">${esc(yard.name)}</div><div class="addr">${esc([yard.address, yard.phone, yard.email].filter(Boolean).join(" · "))}</div></div></div>
 <div class="title"><div class="t">Day summary</div><div class="d">${esc(dmy(day))}${day === today ? " (so far)" : ""}</div></div></header>
 <div class="kpis">${kpi("Given", String(total(s.given)))}${kpi("Taken back", String(total(s.back)), "ok")}${kpi("Collected", money(s.collected), "ok")}${kpi("Change in dues", signed(s.duesChange), s.duesChange > 0 ? "due" : s.duesChange < 0 ? "ok" : "")}</div>
 <div class="cols"><section><h2>Cylinders</h2><table>${cyl}</table></section><section><h2>Money</h2><table>${cash}</table></section></div>

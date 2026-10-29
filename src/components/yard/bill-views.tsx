@@ -288,8 +288,10 @@ export function BillPreview({ bill }: { bill: BillData }) {
       <div className="relative border-b border-[#1c1915] px-3 py-3 text-center">
         {yard.logo ? <img src={yard.logo} alt="" className="absolute left-3 top-3 hidden h-10 w-auto max-w-[110px] object-contain @md:block" /> : null}
         <p className="text-lg font-bold uppercase tracking-wide @md:text-xl">{yard.name}</p>
-        {yard.address ? <p className="mx-auto max-w-md">{yard.address}</p> : null}
-        {yard.phone ? <p>Phone {yard.phone}</p> : null}
+        {yard.address ? <p className="mx-auto max-w-[26rem] text-balance">{yard.address.replace(/\s*\n\s*/g, ", ")}</p> : null}
+        {yard.phone || yard.email ? (
+          <p className="break-words">{[yard.phone && `Phone: ${yard.phone}`, yard.email && `Email: ${yard.email}`].filter(Boolean).join("  |  ")}</p>
+        ) : null}
         {ids ? <p className="font-bold">{ids}</p> : null}
         {!yard.address && !yard.phone && !ids ? <p className="text-xs text-[#5e574d]">Add your letterhead in Settings.</p> : null}
       </div>

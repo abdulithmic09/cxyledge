@@ -51,7 +51,7 @@ function Statement({ s }: { s: PublicStatement }) {
           )}
           <div className="min-w-0 flex-1">
             <p className="truncate font-display text-lg leading-tight">{s.yard.name}</p>
-            <p className="truncate text-xs text-muted">{[s.yard.address, s.yard.phone].filter(Boolean).join(" · ")}</p>
+            <p className="truncate text-xs text-muted">{[s.yard.address, s.yard.phone, s.yard.email].filter(Boolean).join(" · ")}</p>
           </div>
           <button type="button" className="btn btn-ghost h-9 min-h-0 gap-1.5 px-3 text-sm print:hidden" onClick={() => window.print()}>
             <Printer className="size-4" aria-hidden /> Print

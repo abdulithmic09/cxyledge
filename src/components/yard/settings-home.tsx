@@ -41,6 +41,7 @@ export function SettingsHome({ yard, entries, payments, onChanged }: { yard: Yar
   const [gst, setGst] = useState(yard.gst);
   const [pan, setPan] = useState(yard.pan);
   const [phone, setPhone] = useState(yard.phone);
+  const [email, setEmail] = useState(yard.email ?? "");
   const [logo, setLogo] = useState(yard.logo);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -56,6 +57,7 @@ export function SettingsHome({ yard, entries, payments, onChanged }: { yard: Yar
     setGst(yard.gst);
     setPan(yard.pan);
     setPhone(yard.phone);
+    setEmail(yard.email ?? "");
     setLogo(yard.logo);
   }, [yard]);
 
@@ -85,7 +87,7 @@ export function SettingsHome({ yard, entries, payments, onChanged }: { yard: Yar
                 onSubmit={async (event) => {
                   event.preventDefault();
                   setError("");
-                  const result = await saveLetterhead({ data: { address, gst, pan, phone, logo } });
+                  const result = await saveLetterhead({ data: { address, gst, pan, phone, email, logo } });
                   if (!result.ok) {
                     setError(result.error);
                     return;
@@ -97,10 +99,15 @@ export function SettingsHome({ yard, entries, payments, onChanged }: { yard: Yar
                 <Field label="Address">
                   <textarea className="field field-area min-h-20" value={address} maxLength={240} onChange={(event) => setAddress(event.target.value)} />
                 </Field>
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="Phone">
-                    <input className="field" value={phone} maxLength={24} onChange={(event) => setPhone(event.target.value)} />
+                    <input className="field" value={phone} maxLength={40} inputMode="tel" onChange={(event) => setPhone(event.target.value)} />
                   </Field>
+                  <Field label="Email">
+                    <input className="field" type="email" value={email} maxLength={80} onChange={(event) => setEmail(event.target.value)} />
+                  </Field>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="GST">
                     <input className="field" value={gst} maxLength={20} onChange={(event) => setGst(event.target.value)} />
                   </Field>
