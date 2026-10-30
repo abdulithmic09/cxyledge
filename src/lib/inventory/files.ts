@@ -91,7 +91,11 @@ export function makePdf(title: string, lines: string[]): Blob {
 }
 
 export function toCsv(headers: string[], rows: string[][]): string {
-  const cell = (value: string) => `"${value.replace(/"/g, '""')}"`;
+  // A leading = + @ (or - before a letter) makes Excel run the cell as a formula, so those get a ' in front.
+  const cell = (value: string) => {
+    const text = /^[=+@\t\r]|^-[^\d.]/.test(value) ? `'${value}` : value;
+    return `"${text.replace(/"/g, '""')}"`;
+  };
   return `\uFEFF${[headers, ...rows].map((row) => row.map((value) => cell(value)).join(",")).join("\n")}`;
 }
 

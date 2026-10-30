@@ -480,6 +480,23 @@ function EntrySheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft.companyName, mode, editing]);
 
+  // Serials typed for going out that the book says are still out with someone (a typo, or a missed take-back).
+  const clashes = useMemo(() => {
+    if (!givesOut || mode === "bought") return [];
+    const typed = new Set(splitSerials(draft.serialNo).map((serial) => serial.toLowerCase()));
+    if (!typed.size) return [];
+    const comingBack = new Set(Object.values(picks).flat().map((serial) => serial.toLowerCase()));
+    const found: Array<{ serial: string; company: string; date: string }> = [];
+    for (const order of allOrders) {
+      if (editing && order.entry.id === editing.id) continue;
+      for (const serial of order.leftSerials) {
+        const key = serial.toLowerCase();
+        if (typed.has(key) && !comingBack.has(key)) found.push({ serial, company: order.entry.companyName, date: order.entry.entryDate });
+      }
+    }
+    return found;
+  }, [givesOut, mode, draft.serialNo, picks, allOrders, editing]);
+
   /** Exchange: send out as many fulls as empties came back. */
   function matchBack() {
     let next = draft;
@@ -566,7 +583,8 @@ function EntrySheet({
       await saveMoney();
       return;
     }
-    const giving = givesOut ? parseEntry(draft) : null;
+    // "Received" always means the full amount, even if the price changed after picking it.
+    const giving = givesOut ? parseEntry(draft.paymentStatus === "received" ? { ...draft, amountPaid: null } : draft) : null;
     if (giving && !giving.ok) {
       setError(giving.error);
       return;
@@ -852,6 +870,7 @@ function EntrySheet({
                       setDraft(withType(draft, type));
                     }}
                     remembered={remembered}
+                    clashes={clashes}
                     typeHint={mode === "exchange" && !draft.cylinderType ? backType || undefined : undefined}
                     onUseHint={(type) => setDraft(withType(draft, type))}
                   />
@@ -1063,6 +1082,7 @@ function LineFields({
   typeHint,
   onUseHint,
   remembered,
+  clashes = [],
 }: {
   draft: EntryDraft;
   setDraft: (draft: EntryDraft) => void;
@@ -1073,6 +1093,7 @@ function LineFields({
   typeHint?: string;
   onUseHint: (type: string) => void;
   remembered?: string;
+  clashes?: Array<{ serial: string; company: string; date: string }>;
 }) {
   const counted = splitSerials(draft.serialNo).length;
   const lineSubtotal = subtotal(draft.quantity, draft.unitPrice);
@@ -1112,6 +1133,17 @@ function LineFields({
         <Field label="Cylinder serial no." hint={counted ? `${counted} serial${counted === 1 ? "" : "s"}.` : "One per line, or separated by commas. Leave empty to just type the count."}>
           <textarea className="field field-area min-h-20" value={draft.serialNo} onChange={(event) => applySerials(event.target.value)} placeholder={"S-44101\nS-44102"} />
         </Field>
+        {clashes.length ? (
+          <div className="mt-2 rounded-lg border border-rust/30 bg-rust/10 px-3 py-2 text-xs text-rust" role="alert">
+            {clashes.slice(0, 4).map((item) => (
+              <p key={item.serial + item.company}>
+                <span className="code font-semibold">{item.serial}</span> is still out with {item.company} (given {formatDay(item.date)}).
+              </p>
+            ))}
+            {clashes.length > 4 ? <p>and {clashes.length - 4} more.</p> : null}
+            <p className="mt-0.5 text-muted">Check the number, or take it back from them first. You can still save.</p>
+          </div>
+        ) : null}
       </div>
       <div className={cn("grid gap-3 sm:col-span-2", isReturn ? "grid-cols-1" : "grid-cols-2")}>
         <Field label="No. of cylinders" hint={draft.qtyOverride && counted ? `You typed this; the serials count ${counted}.` : counted ? "Counted from the serials." : undefined}>
@@ -1150,7 +1182,7 @@ function LineFields({
                     setDraft({
                       ...draft,
                       paymentStatus: payment.id,
-                      amountPaid: payment.id === "received" && draft.amountPaid == null ? draft.amountDue : draft.amountPaid,
+                      amountPaid: payment.id === "partial" ? draft.amountPaid : null,
                     })
                   }
                 >
@@ -1159,7 +1191,7 @@ function LineFields({
               ))}
             </div>
           </fieldset>
-          {draft.paymentStatus !== "unpaid" ? (
+          {draft.paymentStatus === "partial" ? (
             <Field label="Amount received (₹)">
               <input className="field tabular-nums" inputMode="decimal" value={draft.amountPaid ?? ""} placeholder="0" onChange={(event) => setDraft({ ...draft, amountPaid: moneyInput(event.target.value) })} />
             </Field>
@@ -1218,14 +1250,11 @@ function DateLine({ value, locked, onChange }: { value: string; locked: boolean;
     );
   }
   return (
-    <div className="flex items-center gap-2 self-end text-sm sm:pb-2.5">
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 self-end text-sm sm:pb-2.5">
       <span className="text-muted">Date</span>
-      <span className="font-semibold">
-        {label ? `${label} · ` : ""}
-        {formatDay(value)}
-      </span>
+      <span className="font-semibold">{`${label ? `${label} · ` : ""}${formatDay(value)}`}</span>
       {locked ? (
-        <span className="text-xs text-muted">(take-backs are dated today)</span>
+        <span className="w-full text-xs text-muted">Take-backs are always dated today.</span>
       ) : (
         <button type="button" className="ml-auto rounded-md px-2 py-1 text-sm font-semibold text-pine underline hover:bg-sand sm:ml-1" onClick={() => setOpen(true)}>
           Change

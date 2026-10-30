@@ -155,10 +155,10 @@ const STATUSES: PaymentStatus[] = ["received", "partial", "unpaid"];
 const MOVEMENTS: MovementKind[] = ["delivery", "return", "purchase"];
 
 export function parseEntry(input: EntryDraft): { ok: true; value: EntryDraft } | { ok: false; error: string } {
-  const companyName = input.companyName.trim();
+  const companyName = input.companyName.replace(/\s+/g, " ").trim();
   if (!companyName) return { ok: false, error: "Enter the company name." };
   if (companyName.length > 120) return { ok: false, error: "Company name is too long." };
-  if (!isRealDate(input.entryDate)) return { ok: false, error: "Pick a valid date." };
+  if (!isRealDate(input.entryDate)) return { ok: false, error: "Pick a valid date. It can't be more than a week ahead." };
   const serials = splitSerials(input.serialNo);
   const serialNo = serials.join("\n");
   if (serialNo.length > 2000) return { ok: false, error: "Serial numbers are too long." };
@@ -166,7 +166,7 @@ export function parseEntry(input: EntryDraft): { ok: true; value: EntryDraft } |
   const quantity = input.qtyOverride ? input.quantity : serials.length > 0 ? serials.length : input.quantity;
   if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100000) {
     if (!input.qtyOverride && serials.length === 0) {
-      return { ok: false, error: "Add serial numbers, or turn on Override quantity." };
+      return { ok: false, error: "Add serial numbers, or type the number of cylinders." };
     }
     return { ok: false, error: "Number of cylinders has to be a whole number from 1 to 100000." };
   }
@@ -176,6 +176,13 @@ export function parseEntry(input: EntryDraft): { ok: true; value: EntryDraft } |
   const unitPrice = cleanMoney(input.unitPrice);
   if (amountDue === "bad" || amountPaid === "bad" || unitPrice === "bad") {
     return { ok: false, error: "Amounts have to be zero or more." };
+  }
+  // "Received" with no amount typed means paid in full; "Not received" means nothing was paid.
+  let paidValue: number | null = amountPaid;
+  if (input.paymentStatus === "received" && paidValue == null && amountDue != null) paidValue = amountDue;
+  if (input.paymentStatus === "unpaid") paidValue = null;
+  if (amountDue != null && paidValue != null && paidValue > amountDue + 0.004) {
+    return { ok: false, error: "Received can't be more than the amount. Save extra money with Money received, so it shows as an advance." };
   }
   const note = input.note.trim();
   if (note.length > 300) return { ok: false, error: "Note is too long." };
@@ -191,7 +198,7 @@ export function parseEntry(input: EntryDraft): { ok: true; value: EntryDraft } |
       quantity,
       paymentStatus: input.paymentStatus,
       amountDue,
-      amountPaid,
+      amountPaid: paidValue,
       note,
       movement: input.movement,
       unitPrice,
@@ -207,7 +214,9 @@ export function isRealDate(iso: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
   const [y, m, d] = iso.split("-").map(Number);
   const dt = new Date(y!, (m ?? 1) - 1, d ?? 1);
-  return dt.getFullYear() === y && dt.getMonth() === (m ?? 1) - 1 && dt.getDate() === d;
+  if (!(dt.getFullYear() === y && dt.getMonth() === (m ?? 1) - 1 && dt.getDate() === d)) return false;
+  // Catch typos like 2062 for 2026: nothing before 2000, nothing more than a week ahead.
+  return y! >= 2000 && iso <= addDays(todayISO(), 7);
 }
 
 function cleanMoney(value: number | null): number | null | "bad" {
@@ -249,6 +258,36 @@ export type EntryRow = {
   parent_id: string | null;
   cylinder_type: string | null;
 };
+
+/**
+ * The spelling this book already uses for a company, so "metro kitchen" or "Metro  Kitchen " lands on the
+ * same customer as "Metro Kitchen" instead of starting a new one.
+ */
+export async function matchCompany(yardId: string, name: string): Promise<string> {
+  const clean = String(name ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
+  if (!clean) return clean;
+  const sql = await sqlClient();
+  const rows = await sql<{ name: string }>`
+    select name from (
+      select company_name as name, count(*) as n from entries
+      where yard_id = ${yardId} and deleted_at is null and lower(regexp_replace(trim(company_name), '[[:space:]]+', ' ', 'g')) = lower(${clean})
+      group by company_name
+      union all
+      select company_name as name, count(*) as n from payments
+      where yard_id = ${yardId} and deleted_at is null and lower(regexp_replace(trim(company_name), '[[:space:]]+', ' ', 'g')) = lower(${clean})
+      group by company_name
+      union all
+      select company_name as name, count(*) as n from deposits
+      where yard_id = ${yardId} and deleted_at is null and lower(regexp_replace(trim(company_name), '[[:space:]]+', ' ', 'g')) = lower(${clean})
+      group by company_name
+      union all
+      select plant as name, count(*) as n from stock_moves
+      where yard_id = ${yardId} and deleted_at is null and plant <> '' and lower(regexp_replace(trim(plant), '[[:space:]]+', ' ', 'g')) = lower(${clean})
+      group by plant
+    ) as found order by n desc limit 1
+  `;
+  return rows[0]?.name ?? clean;
+}
 
 export async function sqlClient() {
   const { getSql } = await import("@/lib/db");
@@ -459,7 +498,7 @@ export const createEntry = createServerFn({ method: "POST" })
     if (!canEdit(yard)) return { ok: false as const, error: NEED_EDIT };
     const sql = await sqlClient();
     const id = crypto.randomUUID();
-    const value = parsed.value;
+    const value = { ...parsed.value, companyName: await matchCompany(yard.id, parsed.value.companyName) };
     const known = await sql<{ n: number }>`
       select count(*)::int as n from entries where yard_id = ${yard.id} and deleted_at is null and lower(company_name) = lower(${value.companyName})
     `;
@@ -492,7 +531,7 @@ export const updateEntry = createServerFn({ method: "POST" })
     const yard = await ensureYard(context.userId);
     if (!canEdit(yard)) return { ok: false as const, error: NEED_EDIT };
     const sql = await sqlClient();
-    const value = parsed.value;
+    const value = { ...parsed.value, companyName: await matchCompany(yard.id, parsed.value.companyName) };
     const rows = await sql<EntryRow>`
       update entries set
         company_name = ${value.companyName},
@@ -1269,11 +1308,11 @@ export function mapPayment(row: PaymentRow): Payment {
 }
 
 export function parsePayment(input: PaymentDraft): { ok: true; value: PaymentDraft } | { ok: false; error: string } {
-  const companyName = String(input.companyName ?? "").trim().slice(0, 120);
+  const companyName = String(input.companyName ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
   if (!companyName) return { ok: false, error: "Pick the company." };
   const amount = Math.round(Number(input.amount) * 100) / 100;
   if (!Number.isFinite(amount) || amount <= 0 || amount > 1_000_000_000) return { ok: false, error: "Enter an amount above ₹0." };
-  if (!isRealDate(String(input.paidOn ?? ""))) return { ok: false, error: "Pick a valid date." };
+  if (!isRealDate(String(input.paidOn ?? ""))) return { ok: false, error: "Pick a valid date. It can't be more than a week ahead." };
   const mode = MODES.includes(input.mode) ? input.mode : null;
   if (!mode) return { ok: false, error: "Pick how it was paid." };
   return {
@@ -1315,7 +1354,7 @@ export const createPayment = createServerFn({ method: "POST" })
     const yard = await ensureYard(context.userId);
     if (!canEdit(yard)) return { ok: false as const, error: NEED_EDIT };
     const sql = await sqlClient();
-    const value = parsed.value;
+    const value = { ...parsed.value, companyName: await matchCompany(yard.id, parsed.value.companyName) };
     const prefix = value.direction === "out" ? "P-" : "R-";
     const last = await sql<{ n: number | null }>`
       select max(nullif(regexp_replace(receipt_no, '[^0-9]', '', 'g'), '')::int) as n

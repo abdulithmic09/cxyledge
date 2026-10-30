@@ -137,6 +137,8 @@ export function BillsView({ yard, entries, onChanged }: { yard: YardInfo; entrie
   const billLines: BillLine[] = lines.map((line) => ({ cylinderType: line.cylinderType, serials: splitSerials(line.serialNo), quantity: lineQty(line), price: line.price }));
   const goods = billLines.some((line) => line.price != null) ? Math.round(billLines.reduce((sum, line) => sum + lineAmount(line), 0) * 100) / 100 : null;
   const total = finalTouched ? finalAmount : goods;
+  // "Received" means the whole amount was paid, unless a different figure was typed.
+  const paidNow = payment === "received" && paid == null ? total : payment === "unpaid" ? null : paid;
   const bill: BillData = {
     yard,
     kind,
@@ -147,7 +149,7 @@ export function BillsView({ yard, entries, onChanged }: { yard: YardInfo; entrie
     lines: billLines,
     total,
     payment,
-    paid,
+    paid: paidNow,
     note,
   };
   const fileName = pdfName(billNo, company);
@@ -216,7 +218,7 @@ export function BillsView({ yard, entries, onChanged }: { yard: YardInfo; entrie
           lines: lines.map((line) => ({ cylinderType: line.cylinderType, serialNo: line.serialNo, quantity: lineQty(line), qtyOverride: line.qtyOverride, unitPrice: line.price })),
           total,
           payment,
-          paid,
+          paid: paidNow,
           note,
           pdf,
         },

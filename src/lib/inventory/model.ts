@@ -99,7 +99,12 @@ const BookSchema = z.object({
   bannerHidden: z.boolean().optional(),
 });
 
-export function todayISO(d = new Date()): string {
+/** Today's date as YYYY-MM-DD. With no date given it is today in India (IST), even on a server running in UTC. */
+export function todayISO(d?: Date): string {
+  if (!d) {
+    const ist = new Date(Date.now() + 330 * 60_000);
+    return `${ist.getUTCFullYear()}-${String(ist.getUTCMonth() + 1).padStart(2, "0")}-${String(ist.getUTCDate()).padStart(2, "0")}`;
+  }
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");

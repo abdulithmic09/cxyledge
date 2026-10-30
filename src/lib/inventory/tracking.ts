@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
-import { canEdit, ensureYard, isOwner, isRealDate, logActivity, NEED_EDIT, NEED_OWNER, sqlClient } from "@/lib/inventory/api";
+import { canEdit, ensureYard, isOwner, isRealDate, logActivity, matchCompany, NEED_EDIT, NEED_OWNER, sqlClient } from "@/lib/inventory/api";
 import { splitSerials } from "@/lib/inventory/serials";
 import { financialYear, nextNumber } from "@/lib/inventory/billing";
 
@@ -168,18 +168,22 @@ export const saveStockMove = createServerFn({ method: "POST" })
     const yard = await ensureYard(context.userId);
     if (!canEdit(yard)) return { ok: false as const, error: NEED_EDIT };
     if (!["to_plant", "from_plant", "count"].includes(data.kind)) return { ok: false as const, error: "Pick what happened." };
-    if (!isRealDate(data.date)) return { ok: false as const, error: "Pick a valid date." };
+    if (!isRealDate(data.date)) return { ok: false as const, error: "Pick a valid date. It can't be more than a week ahead." };
     const gasType = String(data.gasType ?? "").trim().slice(0, 60);
     if (!gasType) return { ok: false as const, error: "Pick the gas type." };
     const serials = splitSerials(String(data.serialNo ?? ""));
     if (serials.join("\n").length > 4000) return { ok: false as const, error: "Too many serial numbers in one go." };
-    const plant = String(data.plant ?? "").trim().slice(0, 120);
+    const plant = await matchCompany(yard.id, String(data.plant ?? ""));
     let quantity = 0;
     let fullCount: number | null = null;
     let emptyCount: number | null = null;
     if (data.kind === "count") {
       fullCount = cleanInt(data.fullCount, 0, 100000);
       emptyCount = cleanInt(data.emptyCount, 0, 100000);
+      const given = (value: unknown) => value != null && String(value).trim() !== "";
+      if ((given(data.fullCount) && fullCount == null) || (given(data.emptyCount) && emptyCount == null)) {
+        return { ok: false as const, error: "Counts have to be whole numbers, 0 or more." };
+      }
       if (fullCount == null && emptyCount == null) return { ok: false as const, error: "Enter the full or empty count." };
     } else {
       if (!plant) return { ok: false as const, error: "Enter the plant's name." };
@@ -241,7 +245,7 @@ export const saveHoldTerms = createServerFn({ method: "POST" })
     const sql = await sqlClient();
     const freeDays = data.freeDays == null ? null : cleanInt(data.freeDays, 0, 3650);
     const rate = data.rate == null ? null : cleanMoneyValue(data.rate);
-    const company = String(data.companyName ?? "").trim().slice(0, 120);
+    const company = await matchCompany(yard.id, String(data.companyName ?? ""));
     if (!company) {
       if (freeDays == null || rate == null) return { ok: false as const, error: "Enter free days and a daily rate (₹0 turns charges off)." };
       await sql`update yards set hold_free_days = ${freeDays}, hold_rate = ${rate} where id = ${yard.id}`;
@@ -264,10 +268,10 @@ export const createHoldingCharge = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const yard = await ensureYard(context.userId);
     if (!canEdit(yard)) return { ok: false as const, error: NEED_EDIT };
-    const company = String(data.companyName ?? "").trim().slice(0, 120);
+    const company = await matchCompany(yard.id, String(data.companyName ?? ""));
     const amount = cleanMoneyValue(data.amount);
     if (!company || !amount) return { ok: false as const, error: "Nothing to charge yet." };
-    if (!isRealDate(data.upTo)) return { ok: false as const, error: "Pick a valid date." };
+    if (!isRealDate(data.upTo)) return { ok: false as const, error: "Pick a valid date. It can't be more than a week ahead." };
     const sql = await sqlClient();
     const prefix = `HC/${financialYear(data.upTo)}/`;
     const used = await sql<{ receipt_no: string }>`select receipt_no from payments where yard_id = ${yard.id} and direction = 'charge' and receipt_no like ${prefix + "%"}`;
@@ -293,15 +297,25 @@ export const saveDeposit = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const yard = await ensureYard(context.userId);
     if (!canEdit(yard)) return { ok: false as const, error: NEED_EDIT };
-    const company = String(data.companyName ?? "").trim().slice(0, 120);
+    const company = await matchCompany(yard.id, String(data.companyName ?? ""));
     if (!company) return { ok: false as const, error: "Pick the company." };
     const amount = cleanMoneyValue(data.amount);
     if (!amount) return { ok: false as const, error: "Enter the deposit amount." };
-    if (!isRealDate(data.date)) return { ok: false as const, error: "Pick a valid date." };
+    if (!isRealDate(data.date)) return { ok: false as const, error: "Pick a valid date. It can't be more than a week ahead." };
     const direction = data.direction === "refunded" ? "refunded" : "taken";
     const serials = splitSerials(String(data.serialNo ?? ""));
     const cylinders = serials.length || cleanInt(data.cylinders, 0, 100000) || 0;
     const sql = await sqlClient();
+    if (direction === "refunded") {
+      const held = await sql<{ held: number }>`
+        select coalesce(sum(case when direction = 'taken' then amount else -amount end), 0)::float8 as held
+        from deposits where yard_id = ${yard.id} and company_name = ${company} and deleted_at is null
+      `;
+      const left = Math.round(Number(held[0]?.held ?? 0) * 100) / 100;
+      if (amount > left + 0.004) {
+        return { ok: false as const, error: left > 0 ? `Only ₹${left.toLocaleString("en-IN")} deposit is held for ${company}.` : `No deposit is held for ${company}.` };
+      }
+    }
     const prefix = `${direction === "taken" ? "DR" : "DF"}/${financialYear(data.date)}/`;
     const used = await sql<{ receipt_no: string }>`select receipt_no from deposits where yard_id = ${yard.id} and receipt_no like ${prefix + "%"}`;
     const receiptNo = nextNumber(used.map((row) => row.receipt_no), prefix);
@@ -339,7 +353,7 @@ export const saveCreditDays = createServerFn({ method: "POST" })
     const yard = await ensureYard(context.userId);
     if (!isOwner(yard)) return { ok: false as const, error: NEED_OWNER };
     const days = data.days == null ? null : cleanInt(data.days, 0, 365);
-    const company = String(data.companyName ?? "").trim().slice(0, 120);
+    const company = await matchCompany(yard.id, String(data.companyName ?? ""));
     const sql = await sqlClient();
     if (!company) {
       if (days == null) return { ok: false as const, error: "Enter the number of days (0 to 365)." };
@@ -362,9 +376,9 @@ export const saveChallan = createServerFn({ method: "POST" })
     const yard = await ensureYard(context.userId);
     if (!canEdit(yard)) return { ok: false as const, error: NEED_EDIT };
     const challanNo = String(data.challanNo ?? "").trim().slice(0, 40);
-    const company = String(data.companyName ?? "").trim().slice(0, 120);
+    const company = await matchCompany(yard.id, String(data.companyName ?? ""));
     if (!challanNo || !company) return { ok: false as const, error: "Missing challan number or company." };
-    if (!isRealDate(data.date)) return { ok: false as const, error: "Pick a valid date." };
+    if (!isRealDate(data.date)) return { ok: false as const, error: "Pick a valid date. It can't be more than a week ahead." };
     const signature = String(data.signature ?? "");
     if (signature && (!signature.startsWith("data:image/") || signature.length > 120_000)) return { ok: false as const, error: "The signature is too large. Clear it and sign again." };
     const sql = await sqlClient();

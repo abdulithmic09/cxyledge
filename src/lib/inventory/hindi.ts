@@ -487,4 +487,7 @@ export const HINDI: Record<string, string> = {
   "round-off, bill no., note": "राउंड-ऑफ़, बिल नं., नोट",
   "(take-backs are dated today)": "(वापसी आज की तारीख में होती है)",
   "One per line, or separated by commas. Leave empty to just type the count.": "हर लाइन में एक, या कॉमा से अलग करें। सिर्फ़ गिनती लिखनी हो तो खाली छोड़ें।",
+  // Bug-hunt fixes
+  "Take-backs are always dated today.": "वापसी हमेशा आज की तारीख में होती है।",
+  "Check the number, or take it back from them first. You can still save.": "नंबर जाँच लें, या पहले उनसे वापस लें। फिर भी सेव कर सकते हैं।",
 };

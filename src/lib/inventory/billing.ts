@@ -7,6 +7,7 @@ import {
   isRealDate,
   logActivity,
   mapEntry,
+  matchCompany,
   NEED_EDIT,
   NEED_OWNER,
   parseEntry,
@@ -129,7 +130,7 @@ export const saveBill = createServerFn({ method: "POST" })
     if (!canEdit(yard)) return { ok: false as const, error: NEED_EDIT };
     const billNo = String(data.billNo ?? "").trim().slice(0, 40);
     if (!billNo) return { ok: false as const, error: "Enter the bill number." };
-    if (!isRealDate(data.date)) return { ok: false as const, error: "Pick a valid date." };
+    if (!isRealDate(data.date)) return { ok: false as const, error: "Pick a valid date. It can't be more than a week ahead." };
     const lines = Array.isArray(data.lines) ? data.lines.slice(0, 26) : [];
     if (!lines.length) return { ok: false as const, error: "Add at least one gas line." };
     if (lines.length > 25) return { ok: false as const, error: "A bill can have up to 25 lines." };
@@ -137,11 +138,12 @@ export const saveBill = createServerFn({ method: "POST" })
       return { ok: false as const, error: "The bill PDF is too large. Use a smaller logo." };
     }
     const movement = data.kind === "purchase" ? "purchase" : "delivery";
+    const billCompany = await matchCompany(yard.id, data.company);
 
     const parsed = [];
     for (const [index, line] of lines.entries()) {
       const result = parseEntry({
-        companyName: data.company,
+        companyName: billCompany,
         entryDate: data.date,
         serialNo: line.serialNo ?? "",
         quantity: Number(line.quantity) || 0,
@@ -160,7 +162,7 @@ export const saveBill = createServerFn({ method: "POST" })
       parsed.push(result.value);
     }
     const total = data.total == null ? null : Math.round(Number(data.total) * 100) / 100;
-    const paid = data.paid == null ? null : Math.round(Number(data.paid) * 100) / 100;
+    let paid = data.paid == null ? null : Math.round(Number(data.paid) * 100) / 100;
     if ((total != null && (!Number.isFinite(total) || total < 0 || total > 1e9)) || (paid != null && (!Number.isFinite(paid) || paid < 0 || paid > 1e9))) {
       return { ok: false as const, error: "Amounts have to be zero or more." };
     }
@@ -189,6 +191,13 @@ export const saveBill = createServerFn({ method: "POST" })
 
     const goods = parsed.map((value) => (value.unitPrice != null ? Math.round(value.unitPrice * value.quantity * 100) / 100 : null));
     const shares = shareTotal(goods, total);
+    const billAmount = Math.round(shares.reduce<number>((sum, value) => sum + (value ?? 0), 0) * 100) / 100;
+    // A bill marked Received with no amount typed was paid in full; Not received means nothing was paid.
+    if (data.payment === "received" && paid == null && billAmount > 0) paid = billAmount;
+    if (data.payment === "unpaid") paid = null;
+    if (paid != null && billAmount > 0 && paid > billAmount + 0.004) {
+      return { ok: false as const, error: "Received can't be more than the bill amount. Save extra money with Money received, so it shows as an advance." };
+    }
     // Ids sort in line order, so the bill reads back the way it was typed.
     const stamp = Date.now().toString(36);
     const rows = parsed.map((value, index) => ({
