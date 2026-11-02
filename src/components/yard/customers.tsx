@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, BellRing, ChevronLeft, ChevronRight, FileText, IndianRupee, MessageCircle, MoreHorizontal, Phone, Receipt, Search, Share2, Tags } from "lucide-react";
+import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, BellRing, CalendarRange, ChevronLeft, ChevronRight, FileText, IndianRupee, MessageCircle, MoreHorizontal, Phone, Receipt, Search, Share2, Tags } from "lucide-react";
 import { deleteDocument, listCompanyMeta, restoreDeleted, saveCompanyMeta, saveDocument, type DocRecord, type Entry, type Payment, type YardInfo } from "@/lib/inventory/api";
 import { companyBalances, companyLedger, movementLabel, openOrders, paymentLabel, type CompanyBalance } from "@/lib/inventory/analyse";
 import { daysBetween } from "@/lib/inventory/stock";
@@ -19,6 +19,7 @@ import { DepositsPanel } from "@/components/yard/deposits-panel";
 import { OverduePanel } from "@/components/yard/overdue-panel";
 import { groupBills } from "@/components/yard/bill-views";
 import { openEntrySheet } from "@/components/yard/entry-launcher";
+import { requestMonthlyBill } from "@/components/yard/monthly-bill";
 import { requestBillEdit } from "@/lib/inventory/nav-requests";
 import { ExportBar } from "@/components/yard/export-bar";
 import { StatementPanel, statementUrl, useStatementLink } from "@/components/yard/statement-panel";
@@ -456,6 +457,16 @@ function CompanyPage({
                 </button>
                 <button type="button" className="btn bg-white/12 text-white ring-1 ring-white/15 hover:bg-white/20" onClick={() => onOpenBills()}>
                   <Receipt className="size-5" aria-hidden /> Make bill
+                </button>
+                <button
+                  type="button"
+                  className="btn bg-white/12 text-white ring-1 ring-white/15 hover:bg-white/20"
+                  onClick={() => {
+                    requestMonthlyBill(company);
+                    onOpenBills();
+                  }}
+                >
+                  <CalendarRange className="size-5" aria-hidden /> Monthly bill
                 </button>
                 <button type="button" className="btn bg-white/12 text-white ring-1 ring-white/15 hover:bg-white/20" onClick={() => setTab("details")}>
                   <Tags className="size-5" aria-hidden /> Rates

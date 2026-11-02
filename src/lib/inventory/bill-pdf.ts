@@ -31,6 +31,8 @@ export type BillData = {
   unit?: string;
   /** Delivery challan: no prices or totals, with vehicle details and the receiver's signature. */
   challan?: { vehicle: string; driver: string; receiver: string; signature: string; billedAs?: string };
+  /** Extra pages listing every delivery on the bill with all its serials (monthly bills). */
+  annex?: Array<{ date: string; gas: string; quantity: number; serials: string[] }>;
 };
 
 export type ReceiptData = {
@@ -435,8 +437,12 @@ export async function makeBillPdf(bill: BillData): Promise<Blob> {
   const lines = bill.lines.length ? bill.lines : [{ cylinderType: "", serials: [], quantity: 0, price: null }];
   lines.forEach((line, index) => {
     const serialLines = line.serials.length ? wrap(`Serial nos.: ${line.serials.join(", ")}`, 8.5, descWidth) : [];
-    const shown = serialLines.slice(0, 10);
-    if (serialLines.length > shown.length) shown[shown.length - 1] += " …";
+    const cut = serialLines.length > 10;
+    const shown = serialLines.slice(0, cut && bill.annex?.length ? 9 : 10);
+    if (cut) {
+      shown[shown.length - 1] += " …";
+      if (bill.annex?.length) shown.push(`All ${line.serials.length} serial numbers are on the delivery list.`);
+    }
     const nameLines = wrap(line.cylinderType || "Gas cylinders", 10, descWidth, true).slice(0, 2);
     const rowH = 12 + nameLines.length * 12.5 + shown.length * 10.5 + 4;
     const room = index === lines.length - 1 ? lastBottom : FB - 4;
@@ -524,8 +530,60 @@ export async function makeBillPdf(bill: BillData): Promise<Blob> {
   frame(p);
   const tag = credit ? `${credit.no}  ·  ${dmy(credit.date)}` : `${bill.billNo || ""}  ·  ${dmy(bill.date)}`;
   const thanks = credit ? "This credit note cancels the bill named above." : challan ? "Delivery challan, not a bill. Received the above cylinders in good condition." : "Thank you for your business.";
-  pageFooter(p, thanks, `${tag}  ·  ${pages.length > 1 ? `page ${pages.length}  ·  ` : ""}Made with Cxyledge`);
+  pageFooter(p, thanks, `${tag}  ·  ${pages.length > 1 || bill.annex?.length ? `page ${pages.length}  ·  ` : ""}Made with Cxyledge`);
+  if (bill.annex?.length) annexPages(pages, bill, docNo, tag);
   return assemble(pages, logo, sign);
+}
+
+/** "Delivery list" pages after a monthly bill: every delivery, its gas, count and all serials. */
+function annexPages(pages: Page[], bill: BillData, docNo: string, tag: string) {
+  const cols = { date: FX, gas: FX + 70, qty: FX + 205, serials: FX + 245, end: FR };
+  const serialWidth = cols.end - cols.serials - 14;
+  let p = new Page();
+  pages.push(p);
+  let y = 0;
+  let tableTop = 0;
+  const start = (continued: boolean) => {
+    y = titleBar(p, continued ? "DELIVERY LIST (CONTINUED)" : "DELIVERY LIST");
+    p.text(`${docNo || ""}  ·  ${bill.company}`, W / 2, y + 15, 10, { bold: true, align: "center" });
+    p.text(`${bill.annex!.length} deliveries · ${bill.annex!.reduce((sum, row) => sum + row.quantity, 0)} cylinders`, W / 2, y + 28, 8.5, { align: "center", color: MUTED });
+    y += 36;
+    hline(p, y);
+    p.rect(FX + 0.5, y, FR - FX - 1, 20, HEAD_FILL);
+    const hy = y + 13.5;
+    p.text("Date", cols.date + 7, hy, 8.5, { bold: true });
+    p.text("Gas", cols.gas + 7, hy, 8.5, { bold: true });
+    p.text("Qty", cols.serials - 7, hy, 8.5, { bold: true, align: "right" });
+    p.text("Serial numbers", cols.serials + 7, hy, 8.5, { bold: true });
+    y += 20;
+    hline(p, y);
+    tableTop = y;
+  };
+  const close = (last: boolean) => {
+    for (const x of [cols.gas, cols.qty, cols.serials]) vline(p, x, tableTop, last ? y : FB);
+    if (last) hline(p, y);
+    frame(p);
+    pageFooter(p, last ? "Delivery list for the bill above." : "Continued on the next page", `${tag}  ·  page ${pages.length}  ·  Made with Cxyledge`);
+  };
+  start(false);
+  for (const [index, row] of bill.annex!.entries()) {
+    const serialLines = row.serials.length ? wrap(row.serials.join(", "), 8.5, serialWidth) : ["-"];
+    const gasLines = wrap(row.gas || "Cylinders", 9, cols.qty - cols.gas - 14).slice(0, 2);
+    const rowH = 8 + Math.max(serialLines.length * 10.5, gasLines.length * 11) + 4;
+    if (y + rowH > FB - 4) {
+      close(false);
+      p = new Page();
+      pages.push(p);
+      start(true);
+    }
+    p.text(dmy(row.date), cols.date + 7, y + 13, 9);
+    gasLines.forEach((text, i) => p.text(text, cols.gas + 7, y + 13 + i * 11, 9));
+    p.text(String(row.quantity), cols.serials - 7, y + 13, 9, { align: "right" });
+    serialLines.forEach((text, i) => p.text(text, cols.serials + 7, y + 12.5 + i * 10.5, 8.5, { color: MUTED }));
+    y += rowH;
+    if (index < bill.annex!.length - 1) hline(p, y, FX, FR, HAIR, 0.5);
+  }
+  close(true);
 }
 
 /** Payment receipt (money in) or voucher (money paid out) in the same grid layout. */

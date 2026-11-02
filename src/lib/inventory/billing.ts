@@ -294,6 +294,135 @@ export const saveBill = createServerFn({ method: "POST" })
     return { ok: true as const, entries: inserted.map(mapEntry) };
   });
 
+// ---------------------------------------------------------------------------
+// Monthly bill: one bill for a company's unbilled deliveries in a month
+// ---------------------------------------------------------------------------
+
+export type MonthlyDraft = {
+  company: string;
+  /** YYYY-MM */
+  month: string;
+  billNo: string;
+  date: string;
+  /** The deliveries shown on screen; nothing else gets billed. */
+  ids: string[];
+  /** Rate per cylinder by gas type; null keeps each line's own price. */
+  rates: Record<string, number | null>;
+  note: string;
+  pdf?: string;
+};
+
+export type MonthlyBefore = { id: string; unitPrice: number | null; amountDue: number | null; paymentStatus: PaymentStatus };
+
+const round2 = (value: number) => Math.round(value * 100) / 100;
+
+export const makeMonthlyBill = createServerFn({ method: "POST" })
+  .validator((input: MonthlyDraft) => input)
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const yard = await ensureYard(context.userId);
+    if (!canEdit(yard)) return { ok: false as const, error: NEED_EDIT };
+    const billNo = String(data.billNo ?? "").trim().slice(0, 40);
+    if (!billNo) return { ok: false as const, error: "Enter the bill number." };
+    if (!isRealDate(data.date)) return { ok: false as const, error: "Pick a valid bill date. It can't be more than a week ahead." };
+    if (!/^\d{4}-\d{2}$/.test(String(data.month ?? ""))) return { ok: false as const, error: "Pick the month." };
+    const ids = (Array.isArray(data.ids) ? data.ids : []).map(String).slice(0, 2000);
+    if (!ids.length) return { ok: false as const, error: "There are no unbilled deliveries in that month." };
+    if (data.pdf && (!data.pdf.startsWith("data:application/pdf") || data.pdf.length > 900_000)) {
+      return { ok: false as const, error: "The bill PDF is too large. Use a smaller logo." };
+    }
+    const company = await matchCompany(yard.id, data.company);
+    const sql = await sqlClient();
+    const clash = await sql<{ bill_no: string }>`select bill_no from entries where yard_id = ${yard.id} and bill_no = ${billNo} and deleted_at is null limit 1`;
+    if (clash.length) {
+      const used = await sql<{ bill_no: string }>`select distinct bill_no from entries where yard_id = ${yard.id} and bill_no like ${billPrefix(data.date) + "%"}`;
+      const free = nextNumber(used.map((row) => row.bill_no), billPrefix(data.date));
+      return { ok: false as const, error: `Bill number ${billNo} is already used. The next free number is ${free}.`, suggestion: free };
+    }
+    const from = `${data.month}-01`;
+    const rows = await sql<EntryRow>`
+      select id, company_name, entry_date::text as entry_date, serial_no, quantity, payment_status,
+        amount_due::float8 as amount_due, amount_paid::float8 as amount_paid, note, created_by, updated_at::text as updated_at,
+        movement, unit_price::float8 as unit_price, bill_no, parent_id, cylinder_type
+      from entries
+      where yard_id = ${yard.id} and id = any(string_to_array(${ids.join(",")}, ','))
+        and company_name = ${company} and movement = 'delivery' and bill_no = '' and parent_id is null
+        and deleted_at is null and cancelled_at is null
+        and entry_date >= ${from}::date and entry_date < (${from}::date + interval '1 month')
+    `;
+    if (rows.length !== ids.length) {
+      return { ok: false as const, error: "Some of these deliveries were changed or billed on another device. Reload and try again." };
+    }
+    const rateFor = (type: string) => {
+      const key = Object.keys(data.rates ?? {}).find((name) => name.trim().toLowerCase() === type.trim().toLowerCase());
+      const value = key == null ? null : data.rates[key];
+      return value == null || !Number.isFinite(Number(value)) || Number(value) < 0 || Number(value) > 1e7 ? null : round2(Number(value));
+    };
+    const before: MonthlyBefore[] = [];
+    let total = 0;
+    let qty = 0;
+    const num = (value: unknown) => (value == null ? null : Number(value));
+    for (const row of rows) {
+      const oldPrice = num(row.unit_price);
+      const oldDue = num(row.amount_due);
+      before.push({ id: row.id, unitPrice: oldPrice, amountDue: oldDue, paymentStatus: row.payment_status as PaymentStatus });
+      const price = rateFor(row.cylinder_type ?? "") ?? oldPrice;
+      const due = price == null ? oldDue : round2(price * Number(row.quantity));
+      const paid = num(row.amount_paid) ?? 0;
+      const status: PaymentStatus = due != null && due > 0 && paid >= due - 0.004 ? "received" : paid > 0 ? "partial" : "unpaid";
+      await sql`
+        update entries set bill_no = ${billNo}, unit_price = ${price}, amount_due = ${due}, payment_status = ${status}, updated_at = now()
+        where id = ${row.id} and yard_id = ${yard.id}
+      `;
+      total += due ?? 0;
+      qty += Number(row.quantity);
+    }
+    if (data.pdf) {
+      const title = `${billNo} ${company}.pdf`.replace(/[\\/:*?"<>|]+/g, "-").slice(0, 120);
+      await sql`
+        insert into documents (id, yard_id, company_name, title, kind, mime, content, created_by)
+        values (${crypto.randomUUID()}, ${yard.id}, ${company}, ${title}, 'bill', 'application/pdf', ${data.pdf}, ${context.userId})
+      `;
+    }
+    await logActivity(yard.id, context.userId, "Made monthly bill", `${billNo} · ${company} · ${data.month} · ${rows.length} deliveries · ${qty} cylinders · ₹${round2(total).toLocaleString("en-IN")}`);
+    return { ok: true as const, billNo, company, before, total: round2(total), quantity: qty };
+  });
+
+/** Undo a monthly bill made a moment ago: the deliveries go back to unbilled, with their old prices. */
+export const undoMonthlyBill = createServerFn({ method: "POST" })
+  .validator((input: { billNo: string; before: MonthlyBefore[] }) => input)
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const yard = await ensureYard(context.userId);
+    if (!canEdit(yard)) return { ok: false as const, error: NEED_EDIT };
+    const billNo = String(data.billNo ?? "").trim();
+    const sql = await sqlClient();
+    const since = new Date(Date.now() - 15 * 60_000).toISOString();
+    const made = await sql<{ n: number }>`
+      select count(*)::int as n from activity_log where yard_id = ${yard.id} and user_id = ${context.userId} and action = 'Made monthly bill'
+        and detail like ${billNo + " ·%"} and created_at > ${since}
+    `;
+    if (!Number(made[0]?.n ?? 0)) return { ok: false as const, error: "Undo only works for 15 minutes after making the bill." };
+    let undone = 0;
+    for (const row of (data.before ?? []).slice(0, 2000)) {
+      const status = (["received", "partial", "unpaid"] as const).includes(row.paymentStatus) ? row.paymentStatus : "unpaid";
+      const rows = await sql<{ id: string }>`
+        update entries set bill_no = '', unit_price = ${row.unitPrice}, amount_due = ${row.amountDue}, payment_status = ${status}, updated_at = now()
+        where id = ${String(row.id)} and yard_id = ${yard.id} and bill_no = ${billNo} and deleted_at is null
+        returning id
+      `;
+      undone += rows.length;
+    }
+    await sql`
+      update documents set deleted_at = now(), deleted_by = ${context.userId}
+      where yard_id = ${yard.id} and kind = 'bill' and deleted_at is null and created_by = ${context.userId} and created_at > ${since}
+        and (title like ${billNo.replace(/[\\/:*?"<>|]+/g, "-") + " %"} or title like ${billNo + " %"})
+    `;
+    if (!undone) return { ok: false as const, error: "That bill was already changed." };
+    await logActivity(yard.id, context.userId, "Undid monthly bill", `${billNo} · ${undone} deliveries`);
+    return { ok: true as const };
+  });
+
 export const cancelBill = createServerFn({ method: "POST" })
   .validator((input: { billNo: string; reason: string; date: string }) => input)
   .middleware([authMiddleware])

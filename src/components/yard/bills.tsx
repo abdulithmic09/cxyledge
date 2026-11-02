@@ -16,6 +16,7 @@ import { ChallanForm } from "@/components/yard/challan-form";
 import { getTracking } from "@/lib/inventory/tracking";
 import { clearBillRequest, peekBillRequest } from "@/lib/inventory/nav-requests";
 import { offerUndo } from "@/components/yard/entry-launcher";
+import { MonthlyBill, takeMonthlyRequest } from "@/components/yard/monthly-bill";
 
 type BillKind = "sale" | "purchase";
 
@@ -59,7 +60,8 @@ function nextBillNo(entries: Entry[], cancelled: CancelledBill[], date: string) 
 export function BillsView({ yard, entries, onChanged }: { yard: YardInfo; entries: Entry[]; onChanged: () => void }) {
   const [showPreview, setShowPreview] = useState(false);
   const { canEdit, isOwner } = useRole();
-  const [tab, setTab] = useState<"new" | "challan" | "all">("new");
+  const [monthlyFor] = useState(() => takeMonthlyRequest());
+  const [tab, setTab] = useState<"new" | "monthly" | "challan" | "all">(() => (monthlyFor ? "monthly" : "new"));
   const tracking = useQuery({ queryKey: ["tracking"], queryFn: () => getTracking() });
   const metaQuery = useQuery({ queryKey: ["company-meta"], queryFn: () => listCompanyMeta() });
   const cancelledQuery = useQuery({ queryKey: ["cancelled-bills"], queryFn: () => listCancelledBills() });
@@ -261,15 +263,18 @@ export function BillsView({ yard, entries, onChanged }: { yard: YardInfo; entrie
       <PageHead title="Bills" detail={`${bills.length} ${bills.length === 1 ? "bill" : "bills"}`} />
       <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
         <div className="tabs" role="tablist">
-          {(["new", "challan", "all"] as const).map((item) => (
+          {(["new", "monthly", "challan", "all"] as const).map((item) => (
             <button key={item} type="button" role="tab" aria-selected={tab === item} onClick={() => setTab(item)}>
-              {item === "new" ? (editing ? (editing.startsWith("DC/") ? "Bill challan" : "Edit bill") : "New bill") : item === "challan" ? "Challan" : `All bills (${bills.length})`}
+              {item === "new" ? (editing ? (editing.startsWith("DC/") ? "Bill challan" : "Edit bill") : "New bill") : item === "monthly" ? "Monthly bill" : item === "challan" ? "Challan" : `All bills (${bills.length})`}
             </button>
           ))}
         </div>
       </div>
 
       {tab === "challan" ? <ChallanForm yard={yard} entries={entries} onSaved={onChanged} /> : null}
+      {tab === "monthly" ? (
+        <MonthlyBill yard={yard} entries={entries} meta={metaQuery.data ?? []} cancelled={cancelled} initialCompany={monthlyFor} onChanged={onChanged} />
+      ) : null}
       {tab === "all" ? (
         <BillRegister
           challans={tracking.data?.challans ?? []}
