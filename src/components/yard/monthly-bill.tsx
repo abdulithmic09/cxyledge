@@ -4,7 +4,7 @@ import type { CompanyMeta, Entry, PaymentStatus, YardInfo } from "@/lib/inventor
 import { billPrefix, makeMonthlyBill, nextNumber, undoMonthlyBill, type CancelledBill } from "@/lib/inventory/billing";
 import { blobToDataUrl, dmy, makeBillPdf, pdfName, type BillData } from "@/lib/inventory/bill-pdf";
 import { rupee, splitSerials } from "@/lib/inventory/serials";
-import { BillPreview } from "@/components/yard/bill-views";
+import { BillPreview, monthlyNote, monthName } from "@/components/yard/bill-views";
 import { ExportButtons } from "@/components/yard/bills";
 import { offerUndo } from "@/components/yard/entry-launcher";
 import { Field, Panel } from "@/components/yard/ui";
@@ -30,10 +30,6 @@ function monthEnd(month: string) {
   return `${month}-${String(last).padStart(2, "0")}`;
 }
 
-function monthName(month: string) {
-  const [y, m] = month.split("-").map(Number);
-  return new Date(y!, (m ?? 1) - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
-}
 
 type GasRow = { type: string; deliveries: number; quantity: number; serials: string[]; suggested: number | null; from: "rate" | "lines" | "last" | "" };
 
@@ -158,7 +154,7 @@ export function MonthlyBill({
     payment,
     paid: paid || null,
     annex: open.map((entry) => ({ date: entry.entryDate, gas: entry.cylinderType || "Cylinders", quantity: entry.quantity, serials: splitSerials(entry.serialNo) })),
-    note: [`Cylinders supplied in ${monthName(month)}: ${open.length} ${open.length === 1 ? "delivery" : "deliveries"}${range ? `, ${range}` : ""}.`, note.trim()].filter(Boolean).join(" "),
+    note: monthlyNote(month, open, note),
   };
 
   async function make() {

@@ -124,7 +124,9 @@ export const readStatement = createServerFn({ method: "GET" })
     const payments = paymentRows.map(mapPayment).map((payment) => ({ ...payment, note: "", createdBy: "" }));
     const creditDays = Number(meta[0]?.credit_days ?? yard.credit_days ?? 30);
     const balance = companyBalances(entries, payments).find((row) => row.company === company);
-    const due = dueRows(entries, payments, () => creditDays)[0];
+    const metaRows = await sql<{ bill_no: string; bill_date: string }>`select bill_no, bill_date::text as bill_date from bill_meta where yard_id = ${link.yard_id}`;
+    const billDates = Object.fromEntries(metaRows.map((row) => [row.bill_no, String(row.bill_date).slice(0, 10)]));
+    const due = dueRows(entries, payments, () => creditDays, undefined, billDates)[0];
     const ledger = companyLedger(entries, payments, company);
     await sql`update statement_links set last_viewed_at = now(), views = views + 1 where token = ${token}`;
     return {

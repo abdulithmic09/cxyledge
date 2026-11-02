@@ -231,6 +231,7 @@ function Shell({ userId }: { userId: string }) {
     void queryClient.invalidateQueries({ queryKey: ["docs", userId] });
     void queryClient.invalidateQueries({ queryKey: ["payments", userId] });
     void queryClient.invalidateQueries({ queryKey: ["bin"] });
+    void queryClient.invalidateQueries({ queryKey: ["tracking"] });
   }
 
   return (
@@ -367,7 +368,7 @@ function Shell({ userId }: { userId: string }) {
               <AnalyticsView entries={entries} payments={payments} yardName={yard?.name ?? "Cxyledge"} />
             </Suspense>
           ) : null}
-          {!loading && yard && view === "bills" ? <BillsView key={`bills-${visit}`} yard={yard} entries={entries} onChanged={refresh} /> : null}
+          {!loading && yard && view === "bills" ? <BillsView key={`bills-${visit}`} yard={yard} entries={entries} payments={payments} onChanged={refresh} /> : null}
           {!loading && yard && view === "stock" ? <StockView key={`stock-${visit}`} yard={yard} entries={entries} payments={payments} onChanged={refresh} /> : null}
           {!loading && yard && view === "day" ? <DaySummary yard={yard} entries={entries} payments={payments} /> : null}
           {!loading && yard && view === "users" ? <UsersView yardName={yard.name} /> : null}

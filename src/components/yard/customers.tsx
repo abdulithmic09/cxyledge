@@ -7,7 +7,7 @@ import { daysBetween } from "@/lib/inventory/stock";
 import { todayISO } from "@/lib/inventory/model";
 import { balanceMessage, waNumber, whatsappLink } from "@/lib/inventory/whatsapp";
 import { getTracking } from "@/lib/inventory/tracking";
-import { dueRows } from "@/lib/inventory/dues";
+import { billDatesOf, dueRows } from "@/lib/inventory/dues";
 import { useRole } from "@/lib/inventory/role";
 import { formatDay } from "@/lib/inventory/model";
 import { downloadBlob, makePdf, shareBlob, toCsv } from "@/lib/inventory/files";
@@ -59,9 +59,9 @@ export function CustomersView({
   const own = tracking.data?.companyCredit ?? {};
   const late = useMemo(() => {
     const map = new Map<string, number>();
-    for (const row of dueRows(entries, payments, (company) => own[company] ?? book)) if (row.overdue > 0) map.set(row.company, row.overdue);
+    for (const row of dueRows(entries, payments, (company) => own[company] ?? book, undefined, billDatesOf(tracking.data?.billMeta))) if (row.overdue > 0) map.set(row.company, row.overdue);
     return map;
-  }, [entries, payments, own, book]);
+  }, [entries, payments, own, book, tracking.data?.billMeta]);
 
   useEffect(() => {
     window.scrollTo({ top: 0 });
@@ -517,7 +517,7 @@ function CompanyPage({
       ) : null}
       {tab === "bills" ? (
         <>
-          <BillsTab company={company} entries={entries} documents={docs} onOpenBills={onOpenBills} />
+          <BillsTab company={company} entries={entries} payments={payments} documents={docs} onOpenBills={onOpenBills} />
           <FilesTab company={company} documents={docs} onChanged={onChanged} />
         </>
       ) : null}
@@ -702,9 +702,16 @@ function CylindersTab({ company, entries, balance }: { company: string; entries:
   );
 }
 
-function BillsTab({ company, entries, documents, onOpenBills }: { company: string; entries: Entry[]; documents: DocRecord[]; onOpenBills: () => void }) {
+function BillsTab({ company, entries, payments, documents, onOpenBills }: { company: string; entries: Entry[]; payments: Payment[]; documents: DocRecord[]; onOpenBills: () => void }) {
   const { canEdit } = useRole();
-  const bills = useMemo(() => groupBills(entries.filter((entry) => entry.companyName === company)), [entries, company]);
+  const tracking = useQuery({ queryKey: ["tracking"], queryFn: () => getTracking() });
+  const bills = useMemo(() => groupBills(entries.filter((entry) => entry.companyName === company), tracking.data?.billMeta), [entries, company, tracking.data?.billMeta]);
+  const leftByBill = useMemo(() => {
+    const map = new Map<string, number>();
+    const mine = (row: { companyName: string }) => row.companyName === company;
+    for (const row of dueRows(entries.filter(mine), payments.filter(mine), () => 0, undefined, billDatesOf(tracking.data?.billMeta))) for (const bill of row.bills) map.set(bill.no, (map.get(bill.no) ?? 0) + bill.left);
+    return map;
+  }, [entries, payments, company, tracking.data?.billMeta]);
   const pdfFor = (billNo: string) => documents.find((doc) => doc.title.startsWith(billNo) && doc.content.startsWith("data:"));
   return (
     <Panel title="Bills">
@@ -714,7 +721,7 @@ function BillsTab({ company, entries, documents, onOpenBills }: { company: strin
         <ul className="divide-y divide-line">
           {bills.map((bill) => {
             const total = bill.total ?? 0;
-            const due = Math.max(0, total - (bill.paid ?? 0));
+            const due = bill.kind === "sale" ? (leftByBill.get(bill.billNo) ?? 0) : Math.max(0, total - (bill.paid ?? 0));
             const doc = pdfFor(bill.billNo);
             const challan = bill.billNo.startsWith("DC/");
             return (
@@ -723,6 +730,7 @@ function BillsTab({ company, entries, documents, onOpenBills }: { company: strin
                   <p className="font-semibold">
                     {bill.billNo} <span className="font-normal text-muted">· {formatDay(bill.date)}</span>
                     {challan ? <span className="ml-2 rounded bg-pine/15 px-1.5 py-0.5 text-xs font-medium text-pine">Challan</span> : null}
+                    {bill.monthly ? <span className="ml-2 rounded bg-brand-soft px-1.5 py-0.5 text-xs font-medium text-brand">Monthly</span> : null}
                   </p>
                   <p className="text-xs text-muted">{bill.lines.map((line) => `${line.quantity} × ${line.cylinderType || "cylinders"}`).join(" · ")}</p>
                 </div>
@@ -751,7 +759,7 @@ function BillsTab({ company, entries, documents, onOpenBills }: { company: strin
                         onOpenBills();
                       }}
                     >
-                      {challan ? "Make bill" : "Edit"}
+                      {challan ? "Make bill" : bill.monthly ? "Open" : "Edit"}
                     </button>
                   ) : null}
                 </div>

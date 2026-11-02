@@ -267,6 +267,7 @@ export function BackupPanel({ yard, entriesCsv, paymentsCsv, onChanged }: { yard
         chunk(moves, 300).forEach((rows) => steps.push({ label: "plant trips and counts", send: () => restoreTracking({ data: { yardId, moves: rows } }) }));
         chunk(tracking.deposits.map((row) => ({ ...row, id: freshId() })), 300).forEach((rows) => steps.push({ label: "deposits", send: () => restoreTracking({ data: { yardId, deposits: rows } }) }));
         chunk(tracking.challans.map((row) => ({ ...row, id: freshId() })), 50).forEach((rows) => steps.push({ label: "challans", send: () => restoreTracking({ data: { yardId, challans: rows } }) }));
+        chunk(tracking.billMeta ?? [], 500).forEach((rows) => steps.push({ label: "monthly bills", send: () => restoreTracking({ data: { yardId, billMeta: rows } }) }));
       }
       let batch: BackupDocument[] = [];
       let size = 0;

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Plus, Trash2 } from "lucide-react";
-import { listCompanyMeta, type Entry, type PaymentStatus, type YardInfo } from "@/lib/inventory/api";
+import { listCompanyMeta, type Entry, type Payment, type PaymentStatus, type YardInfo } from "@/lib/inventory/api";
+import { billDatesOf, dueRows } from "@/lib/inventory/dues";
 import { billPrefix, listCancelledBills, nextNumber, saveBill, type CancelledBill } from "@/lib/inventory/billing";
 import { paymentLabel } from "@/lib/inventory/analyse";
 import { rupee, splitSerials } from "@/lib/inventory/serials";
@@ -57,7 +58,7 @@ function nextBillNo(entries: Entry[], cancelled: CancelledBill[], date: string) 
   return nextNumber([...entries.map((entry) => entry.billNo), ...cancelled.map((bill) => bill.billNo)], billPrefix(date));
 }
 
-export function BillsView({ yard, entries, onChanged }: { yard: YardInfo; entries: Entry[]; onChanged: () => void }) {
+export function BillsView({ yard, entries, payments = [], onChanged }: { yard: YardInfo; entries: Entry[]; payments?: Payment[]; onChanged: () => void }) {
   const [showPreview, setShowPreview] = useState(false);
   const { canEdit, isOwner } = useRole();
   const [monthlyFor] = useState(() => takeMonthlyRequest());
@@ -244,7 +245,13 @@ export function BillsView({ yard, entries, onChanged }: { yard: YardInfo; entrie
     }
   }
 
-  const bills = useMemo(() => groupBills(entries), [entries]);
+  const bills = useMemo(() => groupBills(entries, tracking.data?.billMeta), [entries, tracking.data?.billMeta]);
+  // Money received counts against bills the same way as on statements: the named bill first, then the oldest.
+  const leftByBill = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const row of dueRows(entries, payments, () => 0, undefined, billDatesOf(tracking.data?.billMeta))) for (const bill of row.bills) map.set(bill.no, (map.get(bill.no) ?? 0) + bill.left);
+    return map;
+  }, [entries, payments, tracking.data?.billMeta]);
 
   // Another screen asked to open a bill (company page, search, "Make bill" after giving cylinders).
   useEffect(() => {
@@ -253,6 +260,11 @@ export function BillsView({ yard, entries, onChanged }: { yard: YardInfo; entrie
     const bill = bills.find((item) => item.billNo === wanted);
     if (!bill) return;
     clearBillRequest();
+    // Monthly bills aren't edited line by line; they open in All bills, where they can be unbilled.
+    if (bill.monthly) {
+      setTab("all");
+      return;
+    }
     loadBill(bill);
     window.scrollTo({ top: 0 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -285,6 +297,7 @@ export function BillsView({ yard, entries, onChanged }: { yard: YardInfo; entrie
           canEdit={canEdit}
           isOwner={isOwner}
           onEdit={loadBill}
+          leftOf={(billNo) => leftByBill.get(billNo) ?? 0}
           onChanged={() => {
             void cancelledQuery.refetch();
             onChanged();

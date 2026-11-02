@@ -171,6 +171,9 @@ export const saveBill = createServerFn({ method: "POST" })
 
     const sql = await sqlClient();
     const original = String(data.originalBillNo ?? "").trim();
+    if (original && (await isMonthly(yard.id, original))) {
+      return { ok: false as const, error: "This is a monthly bill. To change it, use Unbill in All bills, then make the monthly bill again." };
+    }
     let oldIds: string[] = [];
     // When cylinders on the bill were already taken back, its lines stay as they are (the take-backs point at
     // them); only prices, amounts, payment, date, number and notes can change, and they're updated in place.
@@ -366,7 +369,7 @@ export const makeMonthlyBill = createServerFn({ method: "POST" })
       const oldPrice = num(row.unit_price);
       const oldDue = num(row.amount_due);
       before.push({ id: row.id, unitPrice: oldPrice, amountDue: oldDue, paymentStatus: row.payment_status as PaymentStatus });
-      const price = rateFor(row.cylinder_type ?? "") ?? oldPrice;
+      const price = rateFor(String(row.cylinder_type ?? "").trim() || "Cylinders") ?? oldPrice;
       const due = price == null ? oldDue : round2(price * Number(row.quantity));
       const paid = num(row.amount_paid) ?? 0;
       const status: PaymentStatus = due != null && due > 0 && paid >= due - 0.004 ? "received" : paid > 0 ? "partial" : "unpaid";
@@ -384,6 +387,11 @@ export const makeMonthlyBill = createServerFn({ method: "POST" })
         values (${crypto.randomUUID()}, ${yard.id}, ${company}, ${title}, 'bill', 'application/pdf', ${data.pdf}, ${context.userId})
       `;
     }
+    await sql`
+      insert into bill_meta (yard_id, bill_no, kind, month, bill_date, note, created_by)
+      values (${yard.id}, ${billNo}, 'monthly', ${data.month}, ${data.date}, ${String(data.note ?? "").trim().slice(0, 300)}, ${context.userId})
+      on conflict (yard_id, bill_no) do update set kind = 'monthly', month = excluded.month, bill_date = excluded.bill_date, note = excluded.note
+    `;
     await logActivity(yard.id, context.userId, "Made monthly bill", `${billNo} · ${company} · ${data.month} · ${rows.length} deliveries · ${qty} cylinders · ₹${round2(total).toLocaleString("en-IN")}`);
     return { ok: true as const, billNo, company, before, total: round2(total), quantity: qty };
   });
@@ -419,8 +427,43 @@ export const undoMonthlyBill = createServerFn({ method: "POST" })
         and (title like ${billNo.replace(/[\\/:*?"<>|]+/g, "-") + " %"} or title like ${billNo + " %"})
     `;
     if (!undone) return { ok: false as const, error: "That bill was already changed." };
+    await sql`delete from bill_meta where yard_id = ${yard.id} and bill_no = ${billNo}`;
     await logActivity(yard.id, context.userId, "Undid monthly bill", `${billNo} · ${undone} deliveries`);
     return { ok: true as const };
+  });
+
+async function isMonthly(yardId: string, billNo: string) {
+  const sql = await sqlClient();
+  const rows = await sql<{ kind: string }>`select kind from bill_meta where yard_id = ${yardId} and bill_no = ${billNo}`;
+  return rows[0]?.kind === "monthly";
+}
+
+/**
+ * Take a monthly bill apart: its deliveries go back to unbilled (keeping the rates it set), the bill's PDF goes to
+ * Recently deleted, and the number is free to use again. Make the monthly bill again to change it.
+ */
+export const unbillMonthly = createServerFn({ method: "POST" })
+  .validator((billNo: string) => billNo)
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const yard = await ensureYard(context.userId);
+    if (!canEdit(yard)) return { ok: false as const, error: NEED_EDIT };
+    const billNo = String(data ?? "").trim();
+    if (!(await isMonthly(yard.id, billNo))) return { ok: false as const, error: "That isn't a monthly bill." };
+    const sql = await sqlClient();
+    const rows = await sql<{ id: string; company_name: string }>`
+      update entries set bill_no = '', updated_at = now()
+      where yard_id = ${yard.id} and bill_no = ${billNo} and movement = 'delivery' and deleted_at is null and cancelled_at is null
+      returning id, company_name
+    `;
+    await sql`delete from bill_meta where yard_id = ${yard.id} and bill_no = ${billNo}`;
+    await sql`
+      update documents set deleted_at = now(), deleted_by = ${context.userId}
+      where yard_id = ${yard.id} and kind = 'bill' and deleted_at is null
+        and (title like ${billNo.replace(/[\\/:*?"<>|]+/g, "-") + " %"} or title like ${billNo + " %"})
+    `;
+    await logActivity(yard.id, context.userId, "Unbilled monthly bill", `${billNo} · ${rows[0]?.company_name ?? ""} · ${rows.length} deliveries`);
+    return { ok: true as const, deliveries: rows.length };
   });
 
 export const cancelBill = createServerFn({ method: "POST" })
@@ -430,6 +473,9 @@ export const cancelBill = createServerFn({ method: "POST" })
     const yard = await ensureYard(context.userId);
     if (!isOwner(yard)) return { ok: false as const, error: NEED_OWNER };
     const billNo = String(data.billNo ?? "").trim();
+    if (await isMonthly(yard.id, billNo)) {
+      return { ok: false as const, error: "This is a monthly bill. Use Unbill instead: its deliveries stay in the book and can be billed again." };
+    }
     const reason = String(data.reason ?? "").trim().slice(0, 300);
     const date = isRealDate(data.date) ? data.date : new Date().toISOString().slice(0, 10);
     const rows = await activeBill(yard.id, billNo);

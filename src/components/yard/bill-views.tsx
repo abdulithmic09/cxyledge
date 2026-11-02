@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { saveDocument, type Entry, type PaymentStatus, type YardInfo } from "@/lib/inventory/api";
-import { cancelBill, getCancelledBill, type CancelledBill } from "@/lib/inventory/billing";
-import type { Challan } from "@/lib/inventory/tracking";
+import { cancelBill, getCancelledBill, unbillMonthly, type CancelledBill } from "@/lib/inventory/billing";
+import type { BillMeta, Challan } from "@/lib/inventory/tracking";
 import { splitSerials } from "@/lib/inventory/serials";
 import { downloadBlob, shareBlob } from "@/lib/inventory/files";
 import { billTotals, blobToDataUrl, dmy, lineAmount, makeBillPdf, pdfName, STATUS_WORD, type BillData, type BillLine } from "@/lib/inventory/bill-pdf";
@@ -32,9 +32,40 @@ export type SavedBill = {
   paid: number | null;
   payment: PaymentStatus;
   note: string;
+  /** Monthly bills: the month they cover and every delivery, for the delivery list in the PDF. */
+  monthly?: { month: string; annex: NonNullable<BillData["annex"]> };
 };
 
-export function groupBills(entries: Entry[]): SavedBill[] {
+export function monthName(month: string) {
+  const [y, m] = month.split("-").map(Number);
+  return new Date(y!, (m ?? 1) - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+}
+
+/** The note printed on a monthly bill: what it covers, then the note typed for it. */
+export function monthlyNote(month: string, deliveries: Array<{ entryDate: string }>, note: string) {
+  const dates = deliveries.map((entry) => entry.entryDate).sort();
+  const range = dates.length ? `, ${dmy(dates[0]!)} to ${dmy(dates[dates.length - 1]!)}` : "";
+  return [`Cylinders supplied in ${monthName(month)}: ${deliveries.length} ${deliveries.length === 1 ? "delivery" : "deliveries"}${range}.`, note.trim()].filter(Boolean).join(" ");
+}
+
+/** One line per gas for a monthly bill, from its deliveries. */
+export function monthlyLines(deliveries: Entry[]): BillLine[] {
+  const map = new Map<string, Entry[]>();
+  for (const entry of deliveries) {
+    const type = entry.cylinderType.trim() || "Cylinders";
+    map.set(type, [...(map.get(type) ?? []), entry]);
+  }
+  return [...map.entries()].map(([type, list]) => {
+    const quantity = list.reduce((sum, entry) => sum + entry.quantity, 0);
+    const prices = [...new Set(list.map((entry) => entry.unitPrice))];
+    const amount = list.reduce((sum, entry) => sum + (entry.amountDue ?? 0), 0);
+    const price = prices.length === 1 ? prices[0]! : quantity ? Math.round((amount / quantity) * 100) / 100 : null;
+    return { cylinderType: type, serials: list.flatMap((entry) => splitSerials(entry.serialNo)), quantity, price };
+  });
+}
+
+export function groupBills(entries: Entry[], meta: BillMeta[] = []): SavedBill[] {
+  const metaOf = new Map(meta.map((row) => [row.billNo, row]));
   const map = new Map<string, Entry[]>();
   for (const entry of entries) {
     if (!entry.billNo || entry.movement === "return") continue;
@@ -43,7 +74,22 @@ export function groupBills(entries: Entry[]): SavedBill[] {
     map.set(entry.billNo, list);
   }
   return [...map.entries()]
-    .map(([billNo, list]) => billFromEntries(billNo, list))
+    .map(([billNo, list]) => {
+      const bill = billFromEntries(billNo, list);
+      const own = metaOf.get(billNo);
+      if (own?.kind !== "monthly") return bill;
+      const deliveries = [...list].sort((a, b) => a.entryDate.localeCompare(b.entryDate));
+      const total = bill.total;
+      const paid = bill.paid;
+      return {
+        ...bill,
+        date: own.date,
+        lines: monthlyLines(deliveries),
+        note: monthlyNote(own.month, deliveries, own.note),
+        payment: (total != null && total > 0 && (paid ?? 0) >= total - 0.004 ? "received" : (paid ?? 0) > 0 ? "partial" : "unpaid") as PaymentStatus,
+        monthly: { month: own.month, annex: deliveries.map((entry) => ({ date: entry.entryDate, gas: entry.cylinderType || "Cylinders", quantity: entry.quantity, serials: splitSerials(entry.serialNo) })) },
+      };
+    })
     .sort((a, b) => (a.date === b.date ? b.billNo.localeCompare(a.billNo, "en", { numeric: true }) : b.date.localeCompare(a.date)));
 }
 
@@ -77,6 +123,7 @@ export function BillRegister({
   isOwner,
   onEdit,
   onChanged,
+  leftOf,
 }: {
   challans: Challan[];
   yard: YardInfo;
@@ -87,6 +134,8 @@ export function BillRegister({
   isOwner: boolean;
   onEdit: (bill: SavedBill) => void;
   onChanged: () => void;
+  /** What's still owed on a sale bill after all money received (payments against it, then oldest first). */
+  leftOf?: (billNo: string) => number;
 }) {
   const [query, setQuery] = useState("");
   const [confirm, setConfirm] = useState<string | null>(null);
@@ -123,7 +172,27 @@ export function BillRegister({
     payment: bill.payment,
     paid: bill.paid,
     note: bill.note,
+    annex: bill.monthly?.annex,
   });
+
+  async function doUnbill(bill: SavedBill) {
+    setBusy(true);
+    setNote(null);
+    try {
+      const result = await unbillMonthly({ data: bill.billNo });
+      if (!result.ok) {
+        setNote({ tone: "bad", text: result.error });
+        return;
+      }
+      setConfirm(null);
+      setNote({ tone: "ok", text: `${bill.billNo} unbilled. Its ${result.deliveries} deliveries can go on a new monthly bill.` });
+      onChanged();
+    } catch {
+      setNote({ tone: "bad", text: "Couldn't unbill. Check your internet connection." });
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function doCancel(bill: SavedBill) {
     setBusy(true);
@@ -170,6 +239,7 @@ export function BillRegister({
           {shown.slice(0, limit).map((bill) => {
             const t = billTotals(asData(bill));
             const isChallan = bill.billNo.startsWith("DC/");
+            const due = bill.kind === "sale" && leftOf ? leftOf(bill.billNo) : t.due;
             return (
               <li key={bill.billNo} className="py-3">
                 <div className="flex flex-wrap items-start justify-between gap-2">
@@ -178,6 +248,7 @@ export function BillRegister({
                       {bill.billNo} <span className="font-normal text-muted">· {dmy(bill.date)}</span>
                       {bill.kind === "purchase" ? <span className="ml-2 rounded bg-sand px-1.5 py-0.5 text-xs font-medium">Purchase</span> : null}
                       {isChallan ? <span className="ml-2 rounded bg-pine/15 px-1.5 py-0.5 text-xs font-medium text-pine">Challan{challanOf(bill.billNo)?.signature ? " · signed" : ""}</span> : null}
+                      {bill.monthly ? <span className="ml-2 rounded bg-brand-soft px-1.5 py-0.5 text-xs font-medium text-brand">Monthly · {monthName(bill.monthly.month)}</span> : null}
                     </p>
                     <p className="truncate text-sm">{bill.company}</p>
                     <p className="text-xs text-muted">{bill.lines.map((line) => `${line.quantity} × ${line.cylinderType || "cylinders"}`).join(" · ")}</p>
@@ -190,7 +261,7 @@ export function BillRegister({
                   ) : (
                     <div className="text-right">
                       <p className="font-semibold tabular-nums">{inr(t.total)}</p>
-                      <p className={cn("text-xs font-semibold", t.due > 0 ? "text-rust" : "text-pine")}>{t.due > 0 ? `${inr(t.due)} due` : STATUS_WORD.received}</p>
+                      <p className={cn("text-xs font-semibold", due > 0 ? "text-rust" : "text-pine")}>{due > 0 ? `${inr(due)} due` : STATUS_WORD.received}</p>
                     </div>
                   )}
                 </div>
@@ -201,12 +272,24 @@ export function BillRegister({
                   <button type="button" className="btn btn-ghost h-9 px-3 text-sm" onClick={() => void pdfOf(bill).then((pdf) => shareBlob(pdfName(bill.billNo, bill.company), pdf, `${bill.billNo} · ${yard.name}`))}>
                     Share
                   </button>
-                  {canEdit ? (
+                  {canEdit && bill.monthly ? (
+                    <button
+                      type="button"
+                      className="btn btn-ghost h-9 px-3 text-sm"
+                      onClick={() => {
+                        setConfirm(confirm === bill.billNo ? null : bill.billNo);
+                        setReason("");
+                      }}
+                    >
+                      Unbill
+                    </button>
+                  ) : null}
+                  {canEdit && !bill.monthly ? (
                     <button type="button" className={cn("btn h-9 px-3 text-sm", isChallan ? "btn-pine" : "btn-ghost")} onClick={() => onEdit(bill)}>
                       {isChallan ? "Make bill" : "Edit"}
                     </button>
                   ) : null}
-                  {isOwner ? (
+                  {isOwner && !bill.monthly ? (
                     <button
                       type="button"
                       className="btn btn-ghost h-9 px-3 text-sm text-rust"
@@ -219,7 +302,22 @@ export function BillRegister({
                     </button>
                   ) : null}
                 </div>
-                {confirm === bill.billNo ? (
+                {confirm === bill.billNo && bill.monthly ? (
+                  <div className="mt-3 grid gap-2 rounded-lg border border-line bg-sand p-3">
+                    <p className="text-sm">
+                      Unbilling takes the bill number off its {bill.entries.length} deliveries. They stay in the book with the same rates and count for {bill.company} as before, and you can make the monthly bill again with new rates or a new date. The old PDF goes to Recently deleted.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" className="btn btn-rust" disabled={busy} onClick={() => void doUnbill(bill)}>
+                        {busy ? "Unbilling…" : `Unbill ${bill.billNo}`}
+                      </button>
+                      <button type="button" className="btn btn-ghost" onClick={() => setConfirm(null)}>
+                        Keep bill
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+                {confirm === bill.billNo && !bill.monthly ? (
                   <div className="mt-3 grid gap-2 rounded-lg border border-rust/40 bg-rust/5 p-3">
                     <p className="text-sm">
                       {isChallan

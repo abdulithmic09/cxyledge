@@ -52,6 +52,9 @@ export type Challan = {
   billedBillNo: string;
 };
 
+/** A monthly bill: its own date, the month it covers and the note typed for it. */
+export type BillMeta = { billNo: string; kind: string; month: string; date: string; note: string };
+
 export type Tracking = {
   terms: HoldTerms;
   companyTerms: Record<string, Partial<HoldTerms>>;
@@ -61,6 +64,8 @@ export type Tracking = {
   creditDays: number;
   companyCredit: Record<string, number>;
   challans: Challan[];
+  /** Added 11/2026; older backups don't have it. */
+  billMeta?: BillMeta[];
 };
 
 function cleanInt(value: unknown, min: number, max: number): number | null {
@@ -102,6 +107,9 @@ export const getTracking = createServerFn({ method: "GET" })
       from deposits where yard_id = ${yard.id} and deleted_at is null
       order by on_date desc, created_at desc limit 3000
     `;
+    const billMeta = await sql<{ bill_no: string; kind: string; month: string; bill_date: string; note: string }>`
+      select bill_no, kind, month, bill_date::text as bill_date, note from bill_meta where yard_id = ${yard.id} order by bill_date desc limit 3000
+    `;
     const companyTerms: Record<string, Partial<HoldTerms>> = {};
     const companyCredit: Record<string, number> = {};
     for (const row of companyRows) {
@@ -113,6 +121,7 @@ export const getTracking = createServerFn({ method: "GET" })
       };
     }
     return {
+      billMeta: billMeta.map((row) => ({ billNo: row.bill_no, kind: row.kind, month: row.month, date: String(row.bill_date).slice(0, 10), note: row.note })),
       terms: { freeDays: Number(terms?.hold_free_days ?? 30), rate: Number(terms?.hold_rate ?? 0) },
       companyTerms,
       creditDays: Number(terms?.credit_days ?? 30),
@@ -403,6 +412,7 @@ export type TrackingRestore = {
   moves?: StockMove[];
   deposits?: Deposit[];
   challans?: Challan[];
+  billMeta?: BillMeta[];
 };
 
 /** Add one batch of tracking rows to a book being restored. Ids are fresh ones chosen by the browser. */
@@ -472,6 +482,15 @@ export const restoreTracking = createServerFn({ method: "POST" })
         values (${String(challan.id)}, ${yardId}, ${String(challan.challanNo).slice(0, 40)}, ${String(challan.companyName ?? "").slice(0, 120)}, ${challan.date},
           ${String(challan.vehicle ?? "").slice(0, 40)}, ${String(challan.driver ?? "").slice(0, 60)}, ${String(challan.receiver ?? "").slice(0, 60)}, ${signature},
           ${challan.signedAt && !isNaN(Date.parse(challan.signedAt)) ? challan.signedAt : null}, ${String(challan.billedBillNo ?? "").slice(0, 40)}, ${context.userId})
+        on conflict do nothing
+      `;
+      added += 1;
+    }
+    for (const meta of (data.billMeta ?? []).slice(0, 1000)) {
+      if (!meta.billNo || !isRealDate(meta.date)) continue;
+      await sql`
+        insert into bill_meta (yard_id, bill_no, kind, month, bill_date, note, created_by)
+        values (${yardId}, ${String(meta.billNo).slice(0, 40)}, ${String(meta.kind ?? "monthly").slice(0, 20)}, ${String(meta.month ?? "").slice(0, 7)}, ${meta.date}, ${String(meta.note ?? "").slice(0, 300)}, ${context.userId})
         on conflict do nothing
       `;
       added += 1;

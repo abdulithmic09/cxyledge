@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BellRing, Copy, MessageCircle } from "lucide-react";
 import { listCompanyMeta, type Entry, type Payment } from "@/lib/inventory/api";
 import { getTracking, saveCreditDays } from "@/lib/inventory/tracking";
-import { dueRows, reminderMessage } from "@/lib/inventory/dues";
+import { billDatesOf, dueRows, reminderMessage } from "@/lib/inventory/dues";
 import { waNumber, whatsappLink } from "@/lib/inventory/whatsapp";
 import { dmy } from "@/lib/inventory/bill-pdf";
 import { rupee } from "@/lib/inventory/serials";
@@ -20,7 +20,7 @@ export function OverduePanel({ entries, payments, yardName }: { entries: Entry[]
   const phones = useMemo(() => new Map((metaQuery.data ?? []).map((row) => [row.companyName, row.phone])), [metaQuery.data]);
   const book = tracking.data?.creditDays ?? 30;
   const own = tracking.data?.companyCredit ?? {};
-  const rows = useMemo(() => dueRows(entries, payments, (company) => own[company] ?? book), [entries, payments, own, book]);
+  const rows = useMemo(() => dueRows(entries, payments, (company) => own[company] ?? book, undefined, billDatesOf(tracking.data?.billMeta)), [entries, payments, own, book, tracking.data?.billMeta]);
   const late = rows.filter((row) => row.overdue > 0);
   const [open, setOpen] = useState<string | null>(null);
   const [days, setDays] = useState<string | null>(null);

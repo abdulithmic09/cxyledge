@@ -17,7 +17,14 @@ export type DueRow = {
  * What each customer still owes, bill by bill. Money received with a bill, or against a bill number,
  * pays that bill; other payments pay the oldest bills first. A bill is late once its credit days have passed.
  */
-export function dueRows(entries: Entry[], payments: Payment[], creditFor: (company: string) => number, today = todayISO()): DueRow[] {
+export function dueRows(
+  entries: Entry[],
+  payments: Payment[],
+  creditFor: (company: string) => number,
+  today = todayISO(),
+  /** Bills dated apart from their lines (monthly bills): credit days run from this date. */
+  billDates: Record<string, string> = {},
+): DueRow[] {
   const companies = new Map<string, { bills: DueBill[]; received: number }>();
   const slot = (company: string) => {
     let row = companies.get(company);
@@ -54,7 +61,11 @@ export function dueRows(entries: Entry[], payments: Payment[], creditFor: (compa
     if (bill) bill.left = Math.round((bill.left - used) * 100) / 100;
     slot(payment.companyName).received += payment.amount - used;
   }
-  for (const bill of byBill.values()) slot(bill.company).bills.push(bill);
+  for (const bill of byBill.values()) {
+    const own = bill.no !== "Entry" ? billDates[bill.no] : undefined;
+    if (own) bill.date = own;
+    slot(bill.company).bills.push(bill);
+  }
 
   const rows: DueRow[] = [];
   for (const [company, data] of companies) {
@@ -118,4 +129,9 @@ export function previewPayment(bills: DueBill[], amount: number, billNo = ""): {
     lines.push({ no: bill.no, date: bill.date, used, clears: used >= bill.left - 0.004 });
   }
   return { lines, advance: Math.max(0, left) };
+}
+
+/** billNo → bill date, for bills whose date isn't their lines' date (monthly bills). */
+export function billDatesOf(meta: Array<{ billNo: string; date: string }> | undefined): Record<string, string> {
+  return Object.fromEntries((meta ?? []).map((row) => [row.billNo, row.date]));
 }
