@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
-import { canEdit, ensureYard, isOwner, isRealDate, logActivity, matchCompany, NEED_EDIT, NEED_OWNER, sqlClient } from "@/lib/inventory/api";
-import { splitSerials } from "@/lib/inventory/serials";
+import { canEdit, ensureYard, isOwner, normalizeRole, isRealDate, logActivity, matchCompany, NEED_EDIT, NEED_OWNER, sqlClient } from "@/lib/inventory/api";
+import { cleanTypeList, splitSerials } from "@/lib/inventory/serials";
 import { financialYear, nextNumber } from "@/lib/inventory/billing";
 
 export type StockMoveKind = "to_plant" | "from_plant" | "count";
@@ -391,4 +391,90 @@ export const saveChallan = createServerFn({ method: "POST" })
     `;
     await logActivity(yard.id, context.userId, "Made delivery challan", `${challanNo} · ${company}${signature ? " · signed" : ""}`);
     return { ok: true as const };
+  });
+
+// ---------------------------------------------------------------------------
+// Restore: plant trips, counts, deposits, challans and the book's terms from a backup
+// ---------------------------------------------------------------------------
+
+export type TrackingRestore = {
+  yardId: string;
+  settings?: { terms?: HoldTerms; creditDays?: number; cylinderTypes?: string[]; companyTerms?: Record<string, Partial<HoldTerms>>; companyCredit?: Record<string, number> };
+  moves?: StockMove[];
+  deposits?: Deposit[];
+  challans?: Challan[];
+};
+
+/** Add one batch of tracking rows to a book being restored. Ids are fresh ones chosen by the browser. */
+export const restoreTracking = createServerFn({ method: "POST" })
+  .validator((input: TrackingRestore) => input)
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await sqlClient();
+    const owner = await sql<{ role: string }>`select role from yard_members where yard_id = ${data.yardId} and user_id = ${context.userId}`;
+    if (!owner[0] || normalizeRole(owner[0].role) !== "owner") return { ok: false as const, error: NEED_OWNER };
+    const yardId = data.yardId;
+    let added = 0;
+    const s = data.settings;
+    if (s) {
+      const free = cleanInt(s.terms?.freeDays, 0, 3650) ?? 30;
+      const rate = cleanMoneyValue(s.terms?.rate) ?? 0;
+      const credit = cleanInt(s.creditDays, 0, 3650) ?? 30;
+      const types = cleanTypeList(s.cylinderTypes ?? []);
+      await sql`update yards set hold_free_days = ${free}, hold_rate = ${rate}, credit_days = ${credit} where id = ${yardId}`;
+      if (types.length) await sql`update yards set cylinder_types = ${JSON.stringify(types)} where id = ${yardId}`;
+      const names = new Set([...Object.keys(s.companyTerms ?? {}), ...Object.keys(s.companyCredit ?? {})]);
+      for (const raw of [...names].slice(0, 2000)) {
+        const company = String(raw).trim().slice(0, 120);
+        if (!company) continue;
+        const terms = s.companyTerms?.[raw] ?? {};
+        const ownFree = terms.freeDays == null ? null : cleanInt(terms.freeDays, 0, 3650);
+        const ownRate = terms.rate == null ? null : cleanMoneyValue(terms.rate);
+        const ownCredit = s.companyCredit?.[raw] == null ? null : cleanInt(s.companyCredit[raw], 0, 3650);
+        await sql`
+          insert into company_meta (yard_id, company_name, hold_free_days, hold_rate, credit_days)
+          values (${yardId}, ${company}, ${ownFree}, ${ownRate}, ${ownCredit})
+          on conflict (yard_id, company_name) do update set hold_free_days = excluded.hold_free_days, hold_rate = excluded.hold_rate, credit_days = excluded.credit_days
+        `;
+        added += 1;
+      }
+    }
+    for (const move of (data.moves ?? []).slice(0, 500)) {
+      if (!["to_plant", "from_plant", "count"].includes(move.kind) || !isRealDate(move.date)) continue;
+      await sql`
+        insert into stock_moves (id, yard_id, kind, plant, gas_type, quantity, serial_no, full_count, empty_count, challan_no, note, moved_on, created_by)
+        values (${String(move.id)}, ${yardId}, ${move.kind}, ${String(move.plant ?? "").slice(0, 120)}, ${String(move.gasType ?? "").slice(0, 60)},
+          ${cleanInt(move.quantity, 0, 100000) ?? 0}, ${(move.serials ?? []).join("\n").slice(0, 4000)},
+          ${move.fullCount == null ? null : cleanInt(move.fullCount, 0, 100000)}, ${move.emptyCount == null ? null : cleanInt(move.emptyCount, 0, 100000)},
+          ${String(move.challanNo ?? "").slice(0, 40)}, ${String(move.note ?? "").slice(0, 300)}, ${move.date}, ${context.userId})
+        on conflict (id) do nothing
+      `;
+      added += 1;
+    }
+    for (const deposit of (data.deposits ?? []).slice(0, 500)) {
+      const amount = cleanMoneyValue(deposit.amount);
+      if (amount == null || !isRealDate(deposit.date)) continue;
+      await sql`
+        insert into deposits (id, yard_id, company_name, direction, amount, cylinders, gas_type, serial_no, on_date, mode, reference, note, receipt_no, created_by)
+        values (${String(deposit.id)}, ${yardId}, ${String(deposit.companyName ?? "").slice(0, 120)}, ${deposit.direction === "refunded" ? "refunded" : "taken"}, ${amount},
+          ${cleanInt(deposit.cylinders, 0, 100000) ?? 0}, ${String(deposit.gasType ?? "").slice(0, 60)}, ${(deposit.serials ?? []).join("\n").slice(0, 4000)},
+          ${deposit.date}, ${String(deposit.mode ?? "cash").slice(0, 20)}, ${String(deposit.reference ?? "").slice(0, 60)}, ${String(deposit.note ?? "").slice(0, 300)},
+          ${String(deposit.receiptNo ?? "").slice(0, 40)}, ${context.userId})
+        on conflict (id) do nothing
+      `;
+      added += 1;
+    }
+    for (const challan of (data.challans ?? []).slice(0, 200)) {
+      if (!challan.challanNo || !isRealDate(challan.date)) continue;
+      const signature = String(challan.signature ?? "").startsWith("data:image/") ? String(challan.signature).slice(0, 120_000) : "";
+      await sql`
+        insert into challans (id, yard_id, challan_no, company_name, challan_date, vehicle, driver, receiver, signature, signed_at, billed_bill_no, created_by)
+        values (${String(challan.id)}, ${yardId}, ${String(challan.challanNo).slice(0, 40)}, ${String(challan.companyName ?? "").slice(0, 120)}, ${challan.date},
+          ${String(challan.vehicle ?? "").slice(0, 40)}, ${String(challan.driver ?? "").slice(0, 60)}, ${String(challan.receiver ?? "").slice(0, 60)}, ${signature},
+          ${challan.signedAt && !isNaN(Date.parse(challan.signedAt)) ? challan.signedAt : null}, ${String(challan.billedBillNo ?? "").slice(0, 40)}, ${context.userId})
+        on conflict do nothing
+      `;
+      added += 1;
+    }
+    return { ok: true as const, added };
   });

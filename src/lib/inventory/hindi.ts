@@ -490,4 +490,5 @@ export const HINDI: Record<string, string> = {
   // Bug-hunt fixes
   "Take-backs are always dated today.": "वापसी हमेशा आज की तारीख में होती है।",
   "Check the number, or take it back from them first. You can still save.": "नंबर जाँच लें, या पहले उनसे वापस लें। फिर भी सेव कर सकते हैं।",
+  "You're seeing the book as it was last loaded. New entries and payments are kept on this phone and go into the book once you're back online. Edits and bills need internet.": "आप बही वैसी देख रहे हैं जैसी आखिरी बार लोड हुई थी। नई एंट्री और भुगतान इसी फ़ोन पर रखे जाते हैं और इंटरनेट आते ही बही में चले जाते हैं। बदलाव और बिल के लिए इंटरनेट चाहिए।",
 };

@@ -315,7 +315,7 @@ function Shell({ userId }: { userId: string }) {
         <main className="min-w-0 px-4 py-4 pb-40 lg:px-8 lg:py-6 lg:pb-24">
           {!online ? (
             <p className="mb-4 rounded-lg border border-line bg-sand px-3.5 py-2.5 text-sm" role="status">
-              <span className="font-semibold">No internet.</span> You&apos;re seeing the book as it was last loaded on this device. New changes can&apos;t be saved until you&apos;re back online.
+              <span className="font-semibold">No internet.</span> You&apos;re seeing the book as it was last loaded. New entries and payments are kept on this phone and go into the book once you&apos;re back online. Edits and bills need internet.
             </p>
           ) : null}
           {failed && online ? (

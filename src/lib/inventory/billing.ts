@@ -14,9 +14,11 @@ import {
   readPrices,
   sqlClient,
   type Entry,
+  type EntryDraft,
   type EntryRow,
   type PaymentStatus,
 } from "@/lib/inventory/api";
+import { splitSerials } from "@/lib/inventory/serials";
 
 // ---------------------------------------------------------------------------
 // Numbering by Indian financial year (April to March)
@@ -140,7 +142,7 @@ export const saveBill = createServerFn({ method: "POST" })
     const movement = data.kind === "purchase" ? "purchase" : "delivery";
     const billCompany = await matchCompany(yard.id, data.company);
 
-    const parsed = [];
+    const parsed: EntryDraft[] = [];
     for (const [index, line] of lines.entries()) {
       const result = parseEntry({
         companyName: billCompany,
@@ -170,11 +172,32 @@ export const saveBill = createServerFn({ method: "POST" })
     const sql = await sqlClient();
     const original = String(data.originalBillNo ?? "").trim();
     let oldIds: string[] = [];
+    // When cylinders on the bill were already taken back, its lines stay as they are (the take-backs point at
+    // them); only prices, amounts, payment, date, number and notes can change, and they're updated in place.
+    let keepLines: EntryRow[] | null = null;
     if (original) {
       const old = await activeBill(yard.id, original);
       if (!old.length) return { ok: false as const, error: "That bill was changed or cancelled on another device. Reload and try again." };
       if ((await returnsAgainst(yard.id, old.map((row) => row.id))) > 0) {
-        return { ok: false as const, error: "Some cylinders on this bill were already returned, so it can't be edited. Cancel it and make a new bill instead." };
+        const sameSerials = (a: string, b: string) => splitSerials(a).map((x) => x.toLowerCase()).sort().join("\n") === splitSerials(b).map((x) => x.toLowerCase()).sort().join("\n");
+        const sameLines =
+          old.length === parsed.length &&
+          old.every((row, index) => {
+            const next = parsed[index]!;
+            return (
+              row.company_name.trim().toLowerCase() === next.companyName.trim().toLowerCase() &&
+              String(row.cylinder_type ?? "").trim().toLowerCase() === next.cylinderType.trim().toLowerCase() &&
+              Number(row.quantity) === next.quantity &&
+              sameSerials(row.serial_no, next.serialNo)
+            );
+          });
+        if (!sameLines) {
+          return {
+            ok: false as const,
+            error: "Some cylinders on this bill were already taken back, so its customer, gases, serials and counts can't change. You can still change prices, the total, payment, date and notes. To change cylinders, undo those take-backs in the Book first.",
+          };
+        }
+        keepLines = old;
       }
       oldIds = old.map((row) => row.id);
     }
@@ -215,8 +238,17 @@ export const saveBill = createServerFn({ method: "POST" })
       bill_no: billNo,
       cylinder_type: value.cylinderType,
     }));
-    const json = JSON.stringify(rows);
-    const inserted = await sql<EntryRow>`
+    if (keepLines) {
+      for (const [index, row] of rows.entries()) {
+        await sql`
+          update entries set entry_date = ${row.entry_date}, payment_status = ${row.payment_status}, amount_due = ${row.amount_due},
+            amount_paid = ${row.amount_paid}, note = ${row.note}, unit_price = ${row.unit_price}, bill_no = ${row.bill_no}, updated_at = now()
+          where id = ${keepLines[index]!.id} and yard_id = ${yard.id}
+        `;
+      }
+    }
+    const json = JSON.stringify(keepLines ? [] : rows);
+    const inserted = keepLines ? await activeBill(yard.id, billNo) : await sql<EntryRow>`
       with gone as (
         delete from entries where yard_id = ${yard.id} and id = any(string_to_array(${oldIds.join(",")}, ','))
         returning id
@@ -274,7 +306,7 @@ export const cancelBill = createServerFn({ method: "POST" })
     const rows = await activeBill(yard.id, billNo);
     if (!rows.length) return { ok: false as const, error: "That bill is not in the book any more." };
     if ((await returnsAgainst(yard.id, rows.map((row) => row.id))) > 0) {
-      return { ok: false as const, error: "Some cylinders on this bill were already returned. Undo those returns first, or record the change as a new entry." };
+      return { ok: false as const, error: "Some cylinders on this bill were already taken back, so it can't be cancelled. Undo those take-backs in the Book first. To fix only the price or amount, use Edit on the bill instead." };
     }
     const sql = await sqlClient();
     const used = await sql<{ credit_note_no: string }>`

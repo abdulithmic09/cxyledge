@@ -573,6 +573,13 @@ export const deleteEntry = createServerFn({ method: "POST" })
       returning id, company_name, movement, quantity, cylinder_type, bill_no, amount_due::float8 as amount_due, entry_date::text as entry_date
     `;
     const gone = rows[0];
+    if (gone && gone.movement !== "return") {
+      // Take-backs against this line go with it; left behind they'd lower another delivery's count.
+      await sql`
+        update entries set deleted_at = (select deleted_at from entries where id = ${id} and yard_id = ${yard.id}), deleted_by = ${context.userId}
+        where yard_id = ${yard.id} and parent_id = ${id} and movement = ${"return"} and deleted_at is null
+      `;
+    }
     if (gone) {
       await logActivity(yard.id, context.userId, "Deleted entry", describeEntry({ movement: gone.movement, quantity: Number(gone.quantity), cylinderType: gone.cylinder_type, companyName: gone.company_name, billNo: gone.bill_no, amountDue: gone.amount_due, entryDate: String(gone.entry_date).slice(0, 10) }));
     }
@@ -1162,6 +1169,12 @@ export const restoreDeleted = createServerFn({ method: "POST" })
     const sql = await sqlClient();
     let label = "";
     if (kind === "entry") {
+      // Take-backs deleted together with this line come back with it.
+      await sql`
+        update entries set deleted_at = null, deleted_by = null, updated_at = now()
+        where yard_id = ${yard.id} and parent_id = ${data.id} and movement = ${"return"}
+          and deleted_at = (select deleted_at from entries where id = ${data.id} and yard_id = ${yard.id})
+      `;
       const rows = await sql<{ company_name: string; movement: string; quantity: number; cylinder_type: string | null; bill_no: string; amount_due: number | null; entry_date: string }>`
         update entries set deleted_at = null, deleted_by = null, updated_at = now()
         where id = ${data.id} and yard_id = ${yard.id} and deleted_at is not null
@@ -1412,6 +1425,9 @@ export type BackupFile = {
   companyMeta: Array<CompanyMeta>;
   documents: Array<BackupDocument>;
   activity: Array<Activity & { who: string }>;
+  /** Added 11/2026: plant trips, stock counts, deposits, challans, holding and credit terms, gas types. Older backups don't have it. */
+  tracking?: import("@/lib/inventory/tracking").Tracking;
+  cylinderTypes?: string[];
 };
 
 /** Everything in the book except file contents (fetched separately in batches to stay under response limits). */

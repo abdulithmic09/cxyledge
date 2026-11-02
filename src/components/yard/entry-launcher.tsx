@@ -138,7 +138,8 @@ function moneyInput(raw: string): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
-const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+const norm = (value: string) => value.replace(/\s+/g, " ").trim().toLowerCase();
+const same = (a: string, b: string) => norm(a) === norm(b);
 
 /** The parts of a draft a person types; used to ask before throwing work away. */
 function fingerprint(draft: EntryDraft) {

@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   exportBackup,
   exportDocumentContents,
+  getYard,
   restoreChunk,
   startRestore,
   type BackupDocument,
@@ -11,6 +12,7 @@ import {
   type YardInfo,
 } from "@/lib/inventory/api";
 import { csvBlob, downloadBlob, toCsv } from "@/lib/inventory/files";
+import { getTracking, restoreTracking } from "@/lib/inventory/tracking";
 import { movementLabel, paymentLabel } from "@/lib/inventory/analyse";
 import { useRole } from "@/lib/inventory/role";
 import { Panel } from "@/components/yard/ui";
@@ -79,6 +81,14 @@ async function downloadBackup(onStep?: (text: string) => void): Promise<{ ok: tr
     for (const row of part.contents) contents.set(row.id, row.content);
   }
   backup.documents = docs.map(({ size: _size, ...doc }) => ({ ...doc, content: contents.get(doc.id) ?? "" }));
+  onStep?.("Collecting stock, deposits and challans…");
+  try {
+    backup.tracking = await getTracking();
+    const yard = await getYard();
+    backup.cylinderTypes = yard.cylinderTypes;
+  } catch {
+    return { ok: false, error: "Couldn't collect stock, deposits and challans. Check your internet connection and try again." };
+  }
   const blob = new Blob([JSON.stringify(backup)], { type: "application/json" });
   downloadBlob(`cxyledge-backup-${slug(backup.book.name)}-${stamp()}.json`, blob);
   return { ok: true, backup };
@@ -219,10 +229,21 @@ export function BackupPanel({ yard, entriesCsv, paymentsCsv, onChanged }: { yard
       if (!started.ok) throw new Error("Could not start the restore.");
       const yardId = started.yardId;
       const entryIds = new Map(backup.entries.map((entry) => [entry.id, freshId()]));
+      const tracking = backup.tracking;
+      const moveIds = new Map((tracking?.moves ?? []).map((move) => [move.id, freshId()]));
+      // Refill charges point at their plant trip as "plant:<trip id>"; keep that link with the trip's new id.
+      const parentOf = (parentId: string | null) => {
+        if (!parentId) return null;
+        if (parentId.startsWith("plant:")) {
+          const trip = moveIds.get(parentId.slice(6));
+          return trip ? `plant:${trip}` : null;
+        }
+        return entryIds.get(parentId) ?? null;
+      };
       const entries = backup.entries.map((entry) => ({
         ...entry,
         id: entryIds.get(entry.id)!,
-        parentId: entry.parentId ? (entryIds.get(entry.parentId) ?? null) : null,
+        parentId: parentOf(entry.parentId),
       }));
       const returnLogs = (backup.returnLogs ?? []).map((row) => ({ ...row, id: freshId(), entryId: row.entryId ? (entryIds.get(row.entryId) ?? null) : null }));
       const payments = (backup.payments ?? []).map((row) => ({ ...row, id: freshId() }));
@@ -234,6 +255,19 @@ export function BackupPanel({ yard, entriesCsv, paymentsCsv, onChanged }: { yard
       chunk(returnLogs, 300).forEach((rows) => steps.push({ label: "returns", send: () => restoreChunk({ data: { yardId, returnLogs: rows } }) }));
       chunk(payments, 300).forEach((rows) => steps.push({ label: "payments", send: () => restoreChunk({ data: { yardId, payments: rows } }) }));
       chunk(backup.companyMeta ?? [], 300).forEach((rows) => steps.push({ label: "company notes", send: () => restoreChunk({ data: { yardId, companyMeta: rows } }) }));
+      if (tracking) {
+        steps.push({
+          label: "terms and gas types",
+          send: () =>
+            restoreTracking({
+              data: { yardId, settings: { terms: tracking.terms, creditDays: tracking.creditDays, cylinderTypes: backup.cylinderTypes, companyTerms: tracking.companyTerms, companyCredit: tracking.companyCredit } },
+            }),
+        });
+        const moves = tracking.moves.map((move) => ({ ...move, id: moveIds.get(move.id)! }));
+        chunk(moves, 300).forEach((rows) => steps.push({ label: "plant trips and counts", send: () => restoreTracking({ data: { yardId, moves: rows } }) }));
+        chunk(tracking.deposits.map((row) => ({ ...row, id: freshId() })), 300).forEach((rows) => steps.push({ label: "deposits", send: () => restoreTracking({ data: { yardId, deposits: rows } }) }));
+        chunk(tracking.challans.map((row) => ({ ...row, id: freshId() })), 50).forEach((rows) => steps.push({ label: "challans", send: () => restoreTracking({ data: { yardId, challans: rows } }) }));
+      }
       let batch: BackupDocument[] = [];
       let size = 0;
       const docBatches: BackupDocument[][] = [];
